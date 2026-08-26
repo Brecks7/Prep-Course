@@ -13,6 +13,8 @@ modulo_extensions() {
         return 0
     fi
 
+    backup_dconf
+
     local gnome_ver
     gnome_ver="$(detect_gnome_version)"
     [[ "$gnome_ver" == "0" ]] && gnome_ver="46"

@@ -149,6 +149,35 @@ backup_file() {
     log_info "respaldado: $origen"
 }
 
+# backup_dconf — guarda TODA la configuración del escritorio antes de pisarla.
+# Los módulos de tema y extensiones cambian decenas de claves de gsettings; sin
+# este volcado, undo.sh no tiene forma de devolver el escritorio a como estaba.
+# Se hace una sola vez por corrida.
+DCONF_RESPALDADO=0
+backup_dconf() {
+    [[ "$DCONF_RESPALDADO" == "1" ]] && return 0
+
+    if [[ "$DRY_RUN" == "1" ]]; then
+        printf '  %s[dry]%s dconf dump /org/gnome/ -> $BACKUP_DIR/dconf-org-gnome.ini\n' \
+            "$C_DIM" "$C_RESET"
+        DCONF_RESPALDADO=1
+        return 0
+    fi
+
+    if ! has_cmd dconf; then
+        log_warn "'dconf' no disponible: no se puede respaldar la config del escritorio"
+        return 0
+    fi
+
+    mkdir -p "$BACKUP_DIR"
+    if dconf dump /org/gnome/ > "$BACKUP_DIR/dconf-org-gnome.ini" 2>/dev/null; then
+        DCONF_RESPALDADO=1
+        log_info "configuración del escritorio respaldada ($(wc -l < "$BACKUP_DIR/dconf-org-gnome.ini") líneas)"
+    else
+        log_warn "No se pudo respaldar la configuración del escritorio"
+    fi
+}
+
 # record_action <texto> — deja constancia de algo que undo.sh no puede revertir
 # solo. Se escribe en acciones.txt para que el usuario lo vea.
 record_action() {

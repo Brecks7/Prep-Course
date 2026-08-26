@@ -176,6 +176,27 @@ para el resto de las apps.
 
 ---
 
+## Si seguiste un tutorial de "Ubuntu como macOS"
+
+Casi todos esos videos dejan el equipo más lento, y la causa rara vez es el
+tema. Lo que hay que mirar, en orden:
+
+1. **¿Está acelerando la placa de video?** Corré `glxinfo -B | grep "OpenGL
+   renderer"`. Si dice `llvmpipe`, estás dibujando todo con la CPU y nada va a
+   ir fluido hasta arreglar eso. Ojo: una GPU AMD real dice algo como
+   `AMD Radeon RX 7600 (radeonsi, navi33, LLVM 17.0.6)` — eso tiene "LLVM"
+   pero **no** es `llvmpipe`, está bien.
+2. **¿Cuántos docks tenés activos?** `gnome-extensions list --enabled`. Si
+   aparecen `ubuntu-dock` y `dash-to-dock` juntos, se están peleando.
+3. **¿Qué corre de fondo?** `pgrep -l "plank|conky|cairo-dock"`. Estos comen
+   GPU todo el tiempo.
+
+El diagnóstico completo, con el veredicto ya interpretado:
+
+```bash
+bash setup/doctor.sh
+```
+
 ## Trabajar mejor con Claude
 
 Claude Code corre nativo en Linux, sin WSL de por medio:

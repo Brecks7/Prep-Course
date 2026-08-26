@@ -77,7 +77,18 @@ verificar_gpu() {
     if has_cmd glxinfo; then
         local render
         render="$(glxinfo -B 2>/dev/null | grep -i 'OpenGL renderer' || true)"
-        [[ -n "$render" ]] && log_ok "OpenGL: ${render#*: }"
+        if [[ -n "$render" ]]; then
+            # Ojo con el nombre: una GPU AMD real reporta algo como
+            # "AMD Radeon RX 7600 (radeonsi, navi33, LLVM 17.0.6)". Contiene
+            # "LLVM" pero NO es llvmpipe. Solo llvmpipe/softpipe/swrast
+            # significan que está dibujando la CPU.
+            if grep -qiE 'llvmpipe|softpipe|swrast' <<<"$render"; then
+                note_err "Seguís en renderizado por SOFTWARE: ${render#*: }"
+                note_todo "La GPU no está acelerando. Reiniciá y volvé a correr 'bash setup/doctor.sh'. Si sigue igual, puede faltar firmware: sudo apt install --reinstall linux-firmware"
+            else
+                note_ok "Aceleración por hardware activa: ${render#*: }"
+            fi
+        fi
     fi
 
     if has_cmd vulkaninfo; then

@@ -15,6 +15,9 @@ modulo_theme() {
         return 0
     fi
 
+    # Antes de pisar nada: guardar la config actual del escritorio.
+    backup_dconf
+
     run mkdir -p "$THEME_DIR"
 
     theme_gtk

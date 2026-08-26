@@ -7,6 +7,19 @@ drivers de video completos y con el entorno de desarrollo listo.
 > arranque) y elimina snapd. Si algo sale mal vas a necesitar la pantalla y el
 > teclado. No lo corras por SSH desde el celular.
 
+## Empezá por acá
+
+Si ya seguiste algún tutorial de "Ubuntu como macOS" y te quedó lento, **no
+instales nada encima todavía**. Primero averiguá qué te está frenando:
+
+```bash
+bash setup/doctor.sh
+```
+
+Solo lee, no modifica nada, no necesita `sudo`. Te dice qué está mal y en qué
+orden atacarlo. Al final imprime un bloque `=== PEGAR A CLAUDE ===` que podés
+copiar y mandarme.
+
 ## Uso
 
 ```bash
@@ -33,6 +46,7 @@ bash setup/install.sh --dev                  # solo Node, VS Code y terminal
 | Módulo | Qué hace |
 |---|---|
 | `--base` | Actualiza el sistema, instala utilidades y configura Flatpak + Flathub |
+| `--limpieza` | Saca docks duplicados, Plank/Conky y temas instalados con `sudo` |
 | `--gpu` | Detecta la GPU e instala Mesa, Vulkan y aceleración de video |
 | `--perf` | swappiness, zram, servicios de arranque, indexado*, GRUB* |
 | `--desnap` | Firefox nativo `.deb` y elimina snapd por completo* |
@@ -62,13 +76,58 @@ bash setup/undo.sh            # revertir la última
 bash setup/undo.sh 20260826-1430   # revertir una en particular
 ```
 
-`undo.sh` restaura los archivos de sistema, reactiva los servicios y regenera
-GRUB. Lo que no revierte solo (reinstalar snapd, quitar el tema) lo imprime al
+`undo.sh` restaura los archivos de sistema, reactiva los servicios, regenera
+GRUB y te ofrece devolver **toda la configuración del escritorio** (tema,
+iconos, dock, atajos) a como estaba: antes de tocar nada se guarda un volcado
+completo con `dconf dump`. Lo que no revierte solo (reinstalar snapd, quitar el tema) lo imprime al
 terminar, con los comandos exactos.
 
 **Si el equipo no arranca después de tocar GRUB:** en el menú de arranque elegí
 *Advanced options* → una versión anterior del kernel, entrá y corré
 `bash setup/undo.sh`.
+
+## "Seguí un tutorial y me quedó lento"
+
+Es el resultado más común de los videos de "Ubuntu como macOS", y casi nunca es
+culpa del tema. Son tres causas, en este orden de impacto:
+
+**1. Estás dibujando con la CPU en vez de con la placa de video.** Si el driver
+no quedó bien, GNOME compone por software (`llvmpipe`). Es invisible —no da
+ningún error, solo va lento— y ningún cambio de tema lo va a arreglar. El
+`doctor.sh` lo detecta y lo marca como CRÍTICO.
+
+**2. Tenés varios docks activos a la vez.** Los tutoriales hacen instalar Dash
+to Dock o Dash to Panel, pero nadie apaga el `ubuntu-dock` que Ubuntu ya trae.
+Quedan dos o tres dibujando su propia barra y compitiendo por los mismos
+eventos del mouse.
+
+**3. Procesos de más corriendo de fondo.** Plank, Conky y Cairo-Dock quedan en
+el autostart consumiendo GPU todo el tiempo, aunque no los uses.
+
+Un cuarto problema que no se nota hasta que actualizás: los tutoriales instalan
+el tema con `sudo` en `/usr/share/themes`, que es una carpeta del sistema. Cada
+actualización de Ubuntu lo pisa o lo rompe. Lo correcto es `~/.themes`.
+
+### Orden para arreglarlo
+
+```bash
+bash setup/doctor.sh                          # 1. ver qué pasa
+bash setup/install.sh --gpu                   # 2. aceleración por hardware
+bash setup/install.sh --limpieza              # 3. sacar lo duplicado
+bash setup/install.sh --theme --extensions    # 4. aplicar el look, ya limpio
+# 5. cerrar sesión y volver a entrar
+```
+
+El orden importa: si empezás por el tema sin resolver el punto 1, vas a quedar
+igual de lento pero con otro tema encima.
+
+### Sobre el blur
+
+Blur my Shell es lo que más cuesta por cuadro de todo lo que instalan estos
+tutoriales: obliga a recomponer zonas enteras de la pantalla constantemente. El
+módulo `--limpieza` te ofrece dejarlo solo en el panel superior —que es lo que
+da el aspecto de macOS— y apagarlo en el resto. Se ve casi igual y se nota
+mucho en fluidez.
 
 ## Decisiones que quizás te sorprendan
 
@@ -105,16 +164,27 @@ proceso corriendo. Se puede instalar después con `sudo apt install plank`.
 Los scripts se escribieron y verificaron en un contenedor con **Ubuntu 24.04.4
 Noble**, la misma versión de escritorio:
 
-- Sintaxis (`bash -n`) y `shellcheck -S warning`: limpio en los 11 archivos.
-- Simulación completa (`--dry-run --all --aggressive`): corre de punta a punta.
-- Instalación real de las herramientas de terminal y verificación de que los
+- Sintaxis (`bash -n`) y `shellcheck -S warning`: limpio en los 13 archivos.
+- Simulación completa (`--dry-run --all --aggressive`), sin efectos en disco.
+- `doctor.sh` corriendo **sin escritorio, sin GPU y sin `glxinfo`,
+  `gsettings`, `dconf` ni `gnome-extensions`**: completa el informe y sale
+  con código 0. Es el caso que más fácil rompe un script de diagnóstico.
+- La función que decide si estás en renderizado por software, probada con 9
+  cadenas reales de `glxinfo`. Incluye el caso trampa: una GPU AMD acelerada
+  reporta `AMD Radeon RX 7600 (radeonsi, navi33, LLVM 17.0.6)`, que contiene
+  "LLVM" pero **no** es `llvmpipe` — se clasifica correctamente como acelerada.
+- Detección y limpieza de temas: con `WhiteSur`, `McMojave` y `Yaru` falsos en
+  `/usr/share/themes`, detecta los dos de macOS y deja Yaru intacto.
+- Limpieza de autostart: con `conky`, `plank` y `nextcloud` en
+  `~/.config/autostart`, saca solo el que corresponde.
+- Instalación real de las herramientas de terminal, verificando que los
   binarios quedan en el `PATH`.
 - Existencia de cada paquete apt, comprobada con `apt-cache policy`.
 - Backups, idempotencia y `undo.sh`: probados de verdad, restaurando un archivo
   y comparando `md5sum` contra el original.
 
 Lo que **no** se pudo probar por no haber escritorio ni GPU en el contenedor:
-la instalación del tema WhiteSur, las extensiones de GNOME, los `gsettings`, los
-drivers de video y los cambios en GRUB. Esas partes están cubiertas solo por la
-simulación y por el análisis estático. Por eso: **empezá siempre con
-`--dry-run`.**
+la instalación del tema WhiteSur, las extensiones de GNOME, los `gsettings`
+reales, el `dconf dump`/`load`, los drivers de video y los cambios en GRUB.
+Esas partes están cubiertas solo por la simulación y por el análisis estático.
+Por eso: **empezá siempre con `doctor.sh` y con `--dry-run`.**

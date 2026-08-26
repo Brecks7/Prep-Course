@@ -23,7 +23,7 @@ done
 
 # --- Selección de módulos ----------------------------------------------------
 declare -A EJECUTAR=(
-    [base]=0 [gpu]=0 [perf]=0 [desnap]=0 [theme]=0 [extensions]=0 [dev]=0 [claude]=0
+    [base]=0 [limpieza]=0 [gpu]=0 [perf]=0 [desnap]=0 [theme]=0 [extensions]=0 [dev]=0 [claude]=0
 )
 
 uso() {
@@ -40,6 +40,7 @@ Opciones:
 
 Módulos:
   --base          Actualizar sistema, utilidades, Flatpak
+  --limpieza      Sacar docks duplicados, Plank/Conky y temas puestos con sudo
   --gpu           Drivers de video (AMD/Intel: Mesa, Vulkan, VA-API)
   --perf          swappiness, zram, servicios, GRUB*
   --desnap        Firefox nativo .deb y quitar snapd*     (* requiere --aggressive)
@@ -51,7 +52,10 @@ Módulos:
 Ejemplos:
   bash setup/install.sh --dry-run --all --aggressive
   bash setup/install.sh --all --aggressive
-  bash setup/install.sh --theme --extensions
+  bash setup/install.sh --limpieza --theme --extensions
+
+¿No sabés por dónde empezar? Corré primero el diagnóstico:
+  bash setup/doctor.sh
 EOF
 }
 
@@ -67,6 +71,7 @@ while [[ $# -gt 0 ]]; do
         --aggressive)  AGGRESSIVE=1 ;;
         --yes|-y)      ASSUME_YES=1 ;;
         --base)        EJECUTAR[base]=1 ;;
+        --limpieza)    EJECUTAR[limpieza]=1 ;;
         --gpu|--amd)   EJECUTAR[gpu]=1 ;;
         --perf)        EJECUTAR[perf]=1 ;;
         --desnap)      EJECUTAR[desnap]=1 ;;
@@ -128,6 +133,7 @@ ejecutar_modulo() {
 }
 
 ejecutar_modulo base       modulo_base
+ejecutar_modulo limpieza   modulo_limpieza
 ejecutar_modulo gpu        modulo_gpu
 ejecutar_modulo perf       modulo_perf
 ejecutar_modulo desnap     modulo_desnap

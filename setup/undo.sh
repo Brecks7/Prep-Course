@@ -122,6 +122,26 @@ if [[ -f "$OBJETIVO/acciones.txt" ]]; then
     done < "$OBJETIVO/acciones.txt"
 fi
 
+# --- Configuración del escritorio (dconf) ------------------------------------
+DCONF_DUMP="$OBJETIVO/dconf-org-gnome.ini"
+if [[ -f "$DCONF_DUMP" ]]; then
+    if has_cmd dconf; then
+        log_info "Hay un respaldo de tu escritorio ($(wc -l < "$DCONF_DUMP") líneas)."
+        log_info "Restaurarlo devuelve tema, iconos, dock y atajos a como estaban."
+        if ask "¿Restaurar la configuración del escritorio?"; then
+            if dconf load /org/gnome/ < "$DCONF_DUMP"; then
+                log_ok "Escritorio restaurado"
+            else
+                log_warn "No se pudo restaurar la configuración del escritorio"
+            fi
+        else
+            log_info "El escritorio se dejó como está"
+        fi
+    else
+        log_warn "'dconf' no disponible: no se puede restaurar el escritorio"
+    fi
+fi
+
 # --- GRUB --------------------------------------------------------------------
 if [[ "$GRUB_TOCADO" == "1" ]]; then
     log_info "Regenerando la configuración de GRUB..."
