@@ -69,9 +69,11 @@ npm install
 npm test          # jest sobre los homework
 ```
 
-Ojo: las dependencias de este repo son de 2021 (Eleventy 0.12, Jest 27). Si
-`npm install` o `npm test` fallan con una versión moderna de Node, probá con
-una más vieja: `nvm install 16 && nvm use 16`.
+Ojo: las dependencias de este repo son de 2021 (Eleventy 0.12, Jest 27), pero
+**necesitan Node 20 o superior**, no una más vieja. Una dependencia transitiva
+(`eleventy-plugin-toc` -> `cheerio` -> `undici@7`) no corre en versiones viejas:
+en Node 16 y 18 el build falla, en 22 y 24 anda. El repo trae un `.nvmrc`, así
+que alcanza con `nvm use`.
 
 ## Sitio local
 

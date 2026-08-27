@@ -21,11 +21,13 @@ Soy estudiante y estoy aprendiendo. Cuando me ayudes con un ejercicio:
 - 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
 - Editor: VS Code.
 
-Estado a agosto 2026, según `bash setup/doctor.sh`:
+Estado al 26 de agosto de 2026, según `bash setup/doctor.sh`:
 
-- **Node NO está instalado.** Cuando lo instale, va con **nvm**, nunca con apt,
-  y nunca `sudo npm install -g`.
-- Faltan: `ripgrep fzf bat btop eza zoxide code`, Vulkan y VA-API.
+- **Node instalado con nvm**, 24.20.0 por defecto (también quedaron la 16, 18 y
+  22). La regla se mantiene: siempre nvm, nunca apt, nunca `sudo npm install -g`.
+- Ya instalados: `ripgrep fzf bat btop eza zoxide` y VS Code (repo de Microsoft,
+  no snap).
+- **Siguen faltando Vulkan y VA-API** — el video se decodifica en CPU.
 - 14 extensiones de GNOME habilitadas y Blur my Shell activo — es lo que más
   probable me esté costando la fluidez del escritorio.
 - Tema `MacTahoe-Dark` con iconos `Yaru-prussiangreen`: no combinan, por eso se
@@ -39,9 +41,13 @@ npm install
 npm test          # jest sobre los homework
 ```
 
-Las dependencias de este repo son de 2021 (Eleventy 0.12, Jest 27). Con una
-versión moderna de Node es probable que fallen: `nvm install 16 && nvm use 16`
-solo para este proyecto.
+Las dependencias de este repo son de 2021 (Eleventy 0.12, Jest 27), pero
+**necesitan Node 20 o superior** — al revés de lo que parece. Verificado en
+agosto 2026: en Node 16 el build muere con `ReadableStream is not defined` y en
+Node 18 con `File is not defined`; en 22 y 24 anda todo. El motivo es
+`eleventy-plugin-toc` → `cheerio@1.2.0` → `undici@7`, que exige 20+.
+
+El repo tiene un `.nvmrc` en `24`, así que alcanza con `nvm use` y listo.
 
 ```bash
 npm start         # levanta Eleventy en http://localhost:8080

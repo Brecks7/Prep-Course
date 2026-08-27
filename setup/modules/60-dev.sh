@@ -55,7 +55,7 @@ dev_nvm_node() {
     nvm alias default 'lts/*'
     note_ok "Node LTS instalado ($(node --version 2>/dev/null || echo '?'))"
 
-    note_todo "Este repo (Prep Course) usa Eleventy 0.12 y Jest 27, de 2021. Si 'npm install' o 'npm test' fallan con Node moderno, probá: nvm install 16 && nvm use 16"
+    note_todo "Este repo (Prep Course) usa Eleventy 0.12 y Jest 27, de 2021, pero necesita Node 20 o superior: una dependencia transitiva (cheerio -> undici@7) no corre en versiones viejas. En 16 y 18 el build falla; en 22 y 24 anda. El repo trae un .nvmrc, así que alcanza con: nvm use"
 }
 
 # --- Editor ------------------------------------------------------------------

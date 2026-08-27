@@ -79,7 +79,7 @@ pkg_installed() {
 #   Inexistente: apt-cache policy no imprime nada (o (none) sin proveedores)
 clasificar_paquete() {
     local pkg="$1" salida candidato
-    salida="$(apt-cache policy "$pkg" 2>/dev/null)"
+    salida="$(LC_ALL=C apt-cache policy "$pkg" 2>/dev/null)"
 
     [[ -z "$salida" ]] && { echo "INEXISTENTE"; return; }
 
@@ -97,7 +97,7 @@ clasificar_paquete() {
 
 # Paquetes reales que proveen este nombre virtual, uno por línea.
 proveedores_de() {
-    apt-cache showpkg "$1" 2>/dev/null \
+    LC_ALL=C apt-cache showpkg "$1" 2>/dev/null \
         | sed -n '/Reverse Provides:/,$p' \
         | tail -n +2 \
         | awk 'NF{print $1}' \
