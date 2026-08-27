@@ -65,34 +65,117 @@ pkg_installed() {
     dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "ok installed"
 }
 
-# apt_install <paquetes...> — salta los que ya están, instala el resto de una vez.
-# Devuelve != 0 si al final algún paquete NO quedó instalado. Es importante que
-# falle de verdad: si devolviera 0 siempre, el resumen final diría que todo se
-# instaló cuando no fue así.
+# clasificar_paquete <pkg> -> REAL | VIRTUAL | INEXISTENTE
+#
+# Los nombres de paquete cambian entre versiones de Ubuntu, y un nombre que ya
+# no existe hace fallar el lote entero de apt-get install. Peor: un paquete
+# puede volverse "virtual" (un alias que provee otro paquete). Por ejemplo
+# mesa-va-drivers, que en 24.04 es real y en 26.04 lo provee mesa-libgallium.
+# dpkg-query no encuentra los virtuales, así que sin esto el kit reporta que
+# falló una instalación que en realidad está bien.
+#
+#   Real:        apt-cache policy da "Candidate: <versión>"
+#   Virtual:     da "Candidate: (none)" y showpkg lista Reverse Provides
+#   Inexistente: apt-cache policy no imprime nada (o (none) sin proveedores)
+clasificar_paquete() {
+    local pkg="$1" salida candidato
+    salida="$(apt-cache policy "$pkg" 2>/dev/null)"
+
+    [[ -z "$salida" ]] && { echo "INEXISTENTE"; return; }
+
+    candidato="$(awk '/Candidate:/{print $2}' <<<"$salida")"
+    if [[ -n "$candidato" && "$candidato" != "(none)" ]]; then
+        echo "REAL"; return
+    fi
+
+    if [[ -n "$(proveedores_de "$pkg")" ]]; then
+        echo "VIRTUAL"; return
+    fi
+
+    echo "INEXISTENTE"
+}
+
+# Paquetes reales que proveen este nombre virtual, uno por línea.
+proveedores_de() {
+    apt-cache showpkg "$1" 2>/dev/null \
+        | sed -n '/Reverse Provides:/,$p' \
+        | tail -n +2 \
+        | awk 'NF{print $1}' \
+        | sort -u
+}
+
+# ¿Está cubierto este nombre? Instalado directamente, o virtual con algún
+# proveedor instalado.
+paquete_satisfecho() {
+    local pkg="$1" prov
+    pkg_installed "$pkg" && return 0
+
+    while IFS= read -r prov; do
+        [[ -n "$prov" ]] && pkg_installed "$prov" && return 0
+    done < <(proveedores_de "$pkg")
+
+    return 1
+}
+
+# apt_install <paquetes...>
+#
+# Salta los que ya están cubiertos, resuelve los virtuales a su proveedor, y
+# saltea con aviso los que no existen en esta versión de Ubuntu en vez de hacer
+# fallar todo el lote.
+#
+# Devuelve != 0 solo si un paquete que SÍ existía no quedó instalado. Un nombre
+# inexistente es un aviso, no un error: significa que cambió entre versiones.
 apt_install() {
-    local faltantes=()
-    local p
+    local a_instalar=() inexistentes=()
+    local p tipo provs n_provs
+
     for p in "$@"; do
-        if pkg_installed "$p"; then
+        if paquete_satisfecho "$p"; then
             log_info "ya instalado: $p"
-        else
-            faltantes+=("$p")
+            continue
         fi
+
+        tipo="$(clasificar_paquete "$p")"
+        case "$tipo" in
+            REAL)
+                a_instalar+=("$p")
+                ;;
+            VIRTUAL)
+                provs="$(proveedores_de "$p")"
+                n_provs="$(wc -l <<<"$provs")"
+                if [[ "$n_provs" -eq 1 ]]; then
+                    log_info "$p es virtual, lo provee: $provs"
+                    a_instalar+=("$provs")
+                else
+                    # Elegir por el usuario entre varios proveedores sería
+                    # adivinar; mejor decirlo y seguir.
+                    note_warn "$p es virtual y lo proveen varios paquetes ($(tr '\n' ' ' <<<"$provs")) — elegí uno a mano"
+                fi
+                ;;
+            INEXISTENTE)
+                inexistentes+=("$p")
+                ;;
+        esac
     done
-    if [[ ${#faltantes[@]} -eq 0 ]]; then
+
+    if [[ ${#inexistentes[@]} -gt 0 ]]; then
+        note_warn "No existen en esta versión de Ubuntu, se saltean: ${inexistentes[*]}"
+    fi
+
+    if [[ ${#a_instalar[@]} -eq 0 ]]; then
         log_ok "nada que instalar"
         return 0
     fi
 
-    log_info "instalando: ${faltantes[*]}"
-    run sudo apt-get install -y "${faltantes[@]}"
+    log_info "instalando: ${a_instalar[*]}"
+    run sudo apt-get install -y "${a_instalar[@]}"
 
     [[ "$DRY_RUN" == "1" ]] && return 0
 
     # Comprobar de verdad, no confiar en el código de salida de apt.
     local no_quedaron=()
-    for p in "${faltantes[@]}"; do
-        pkg_installed "$p" || no_quedaron+=("$p")
+    for p in "${a_instalar[@]}"; do
+        paquete_satisfecho "$p" || no_quedaron+=("$p")
     done
     if [[ ${#no_quedaron[@]} -gt 0 ]]; then
         log_err "no se pudieron instalar: ${no_quedaron[*]}"
@@ -291,9 +374,19 @@ require_ubuntu() {
         log_err "Este script está hecho para Ubuntu. Detectado: ${ID:-desconocido}"
         exit 1
     fi
-    if [[ "${VERSION_ID:-}" != "24.04" ]]; then
-        log_warn "Pensado para Ubuntu 24.04. Detectado: ${VERSION_ID:-?}"
-        ask "¿Seguir igual?" || exit 1
+    # Verificado en 24.04. Las versiones posteriores deberían andar —el kit ya
+    # no depende de nombres de paquete fijos— pero no están probadas, y eso se
+    # dice en vez de fingir que sí.
+    local ver="${VERSION_ID:-0}"
+    if [[ "$ver" != "24.04" ]]; then
+        # Comparación numérica: 26.04 >= 24.04
+        if awk -v v="$ver" 'BEGIN{exit !(v+0 >= 24.04)}' 2>/dev/null; then
+            log_warn "Ubuntu $ver: el kit se verificó en 24.04, no acá."
+            log_warn "Debería funcionar, pero corré primero con --dry-run."
+        else
+            log_warn "Ubuntu $ver es anterior a 24.04 — el kit no está pensado para esta versión."
+            ask "¿Seguir igual?" || exit 1
+        fi
     fi
 }
 

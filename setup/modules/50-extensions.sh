@@ -17,7 +17,13 @@ modulo_extensions() {
 
     local gnome_ver
     gnome_ver="$(detect_gnome_version)"
-    [[ "$gnome_ver" == "0" ]] && gnome_ver="46"
+    if [[ "$gnome_ver" == "0" ]]; then
+        # Antes acá había un 46 fijo. Suponer una versión es peor que no hacer
+        # nada: se bajarían extensiones para un GNOME que no es el que corre.
+        note_warn "No se pudo detectar la versión de GNOME — no se instalan extensiones"
+        note_todo "Instalalas a mano desde la app 'Extension Manager'"
+        return 0
+    fi
     log_info "GNOME Shell versión $gnome_ver"
 
     # user-theme (necesaria para que el tema WhiteSur se aplique a la barra

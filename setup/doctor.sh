@@ -60,11 +60,17 @@ printf '%sSolo lectura: este script no modifica nada.%s\n' "$DIM" "$R"
 # --- Sistema ---------------------------------------------------------------
 titulo "Sistema"
 
+VERSION_UBUNTU="0"
 if [[ -r /etc/os-release ]]; then
     # shellcheck disable=SC1091
     . /etc/os-release
+    VERSION_UBUNTU="${VERSION_ID:-0}"
     dato "SO: ${PRETTY_NAME:-desconocido}"
     res "SO: ${PRETTY_NAME:-?}"
+    if [[ "$VERSION_UBUNTU" != "24.04" ]]; then
+        dato "   (el kit se verificó en 24.04; acá no. Usá --dry-run primero)"
+        res "Kit NO verificado en esta versión de Ubuntu"
+    fi
 else
     avis "No se pudo leer /etc/os-release"
 fi
@@ -151,14 +157,21 @@ if hay vainfo; then
         res "VA-API: no responde"
     fi
 else
-    dato "VA-API no instalada (la agrega el módulo --gpu)"
-    res "VA-API: ausente"
+    avis "Sin VA-API: los videos los decodifica la CPU, no la placa."
+    dato "   Se nota en ventiladores, consumo y saltos al reproducir video."
+    dato "   Lo instala: bash setup/install.sh --gpu"
+    res "VA-API: AUSENTE (video decodifica en CPU)"
 fi
 
+# Desde Ubuntu 26.04 la sesión es solo Wayland, así que este consejo no aplica.
 if [[ "$SESION" == "x11" ]]; then
-    avis "Estás en X11. Wayland compone mejor, sobre todo con blur y sombras."
-    dato "   Se cambia en la pantalla de login: engranaje → Ubuntu (Wayland)"
-    res "X11 en uso (Wayland rinde mejor)"
+    if awk -v v="$VERSION_UBUNTU" 'BEGIN{exit !(v+0 >= 26.04)}' 2>/dev/null; then
+        dato "Sesión X11 sobre XWayland (compatibilidad); la sesión nativa es Wayland"
+    else
+        avis "Estás en X11. Wayland compone mejor, sobre todo con blur y sombras."
+        dato "   Se cambia en la pantalla de login: engranaje → Ubuntu (Wayland)"
+        res "X11 en uso (Wayland rinde mejor)"
+    fi
 fi
 
 # --- Extensiones -----------------------------------------------------------
@@ -170,8 +183,11 @@ if hay gnome-extensions; then
     dato "Extensiones habilitadas: $CANT"
     res "Extensiones habilitadas: $CANT"
 
+    # La lista va también al bloque que se pega: con solo el número no se puede
+    # aconsejar cuáles desactivar, que es justo lo que se necesita saber.
     for e in "${HABILITADAS[@]}"; do
         dato "   - $e"
+        res "  ext: $e"
     done
 
     # Varios docks a la vez es el error clásico de estos tutoriales:
@@ -198,9 +214,14 @@ if hay gnome-extensions; then
         res "Blur my Shell: ACTIVO"
     fi
 
-    if [[ "$CANT" -gt 8 ]]; then
-        avis "$CANT extensiones es bastante — cada una corre dentro del shell."
-        res "Muchas extensiones ($CANT)"
+    if [[ "$CANT" -gt 10 ]]; then
+        avis "$CANT extensiones: todas corren dentro del mismo proceso que dibuja"
+        dato "   tu escritorio. Con esta cantidad es la causa más probable de"
+        dato "   que se sienta pesado. La lista completa está arriba."
+        res "MUCHAS EXTENSIONES ($CANT)  <-- sospechoso principal"
+    elif [[ "$CANT" -gt 6 ]]; then
+        avis "$CANT extensiones — revisá si usás todas."
+        res "Extensiones: $CANT (revisar)"
     fi
 else
     dato "'gnome-extensions' no disponible — sin sesión gráfica, se saltea"
@@ -247,6 +268,19 @@ if hay gsettings; then
     dato "Tema GTK: ${TEMA:-?} · Iconos: ${ICONOS:-?}"
     dato "Botones de ventana: ${BOTONES:-?} · Animaciones: ${ANIM:-?}"
     res "Tema: ${TEMA:-?} / iconos ${ICONOS:-?} / botones ${BOTONES:-?}"
+
+    # Un tema estilo macOS con los iconos de Ubuntu (o al revés) se ve
+    # incoherente. No afecta el rendimiento, pero es lo que hace que "no
+    # termine de verse bien" aunque el tema esté aplicado.
+    es_mac_tema=0; es_mac_iconos=0
+    grep -qiE 'whitesur|mcmojave|mojave|bigsur|monterey|mactahoe|tahoe|sonoma|ventura' <<<"$TEMA"   && es_mac_tema=1
+    grep -qiE 'whitesur|mcmojave|mojave|bigsur|monterey|mactahoe|tahoe|sonoma|ventura' <<<"$ICONOS" && es_mac_iconos=1
+    if [[ "$es_mac_tema" != "$es_mac_iconos" ]]; then
+        avis "El tema y los iconos son de familias distintas."
+        dato "   Tema '${TEMA}' con iconos '${ICONOS}': por eso se ve mezclado."
+        dato "   Lo empareja: bash setup/install.sh --theme"
+        res "Tema e iconos NO combinan (${TEMA} + ${ICONOS})"
+    fi
 else
     dato "'gsettings' no disponible — se saltea"
     res "Tema: sin datos"

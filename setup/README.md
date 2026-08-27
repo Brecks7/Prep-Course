@@ -1,7 +1,12 @@
-# Kit de setup para Ubuntu 24.04
+# Kit de setup para Ubuntu 24.04 en adelante
 
-Scripts para dejar Ubuntu 24.04 con aspecto de macOS, más rápido, con los
-drivers de video completos y con el entorno de desarrollo listo.
+Scripts para dejar Ubuntu con aspecto de macOS, más rápido, con los drivers de
+video completos y con el entorno de desarrollo listo.
+
+Escrito y verificado en **24.04**. Funciona en versiones posteriores (26.04
+incluida): el kit no depende de nombres de paquete fijos — detecta si un paquete
+no existe o pasó a ser virtual y se adapta. Pero **no está probado ahí**, así que
+en una versión distinta de 24.04 empezá con `--dry-run`.
 
 > **Corré esto sentado frente a la PC.** El modo agresivo toca GRUB (el
 > arranque) y elimina snapd. Si algo sale mal vas a necesitar la pantalla y el
@@ -121,6 +126,15 @@ bash setup/install.sh --theme --extensions    # 4. aplicar el look, ya limpio
 El orden importa: si empezás por el tema sin resolver el punto 1, vas a quedar
 igual de lento pero con otro tema encima.
 
+### En Ubuntu 26.04 y GNOME 50
+
+Algunas extensiones tardan meses en tener versión para un GNOME recién salido.
+Si el módulo `--extensions` te avisa que alguna "no tiene versión compatible", no
+es un error del script: todavía no existe. Volvé a correrlo más adelante.
+
+El indexador de archivos cambió de nombre: desde GNOME 47 `tracker3` se llama
+`localsearch`. El módulo `--perf` maneja los dos juegos de nombres.
+
 ### Sobre el blur
 
 Blur my Shell es lo que más cuesta por cuadro de todo lo que instalan estos
@@ -162,29 +176,41 @@ proceso corriendo. Se puede instalar después con `sudo apt install plank`.
 ## Qué se probó y qué no
 
 Los scripts se escribieron y verificaron en un contenedor con **Ubuntu 24.04.4
-Noble**, la misma versión de escritorio:
+Noble**:
 
 - Sintaxis (`bash -n`) y `shellcheck -S warning`: limpio en los 13 archivos.
 - Simulación completa (`--dry-run --all --aggressive`), sin efectos en disco.
-- `doctor.sh` corriendo **sin escritorio, sin GPU y sin `glxinfo`,
-  `gsettings`, `dconf` ni `gnome-extensions`**: completa el informe y sale
-  con código 0. Es el caso que más fácil rompe un script de diagnóstico.
+- **Clasificación de paquetes** (`REAL` / `VIRTUAL` / `INEXISTENTE`), probada
+  contra paquetes reales de cada clase: `ripgrep` y `mesa-vulkan-drivers`
+  (reales), `awk` y `mail-transport-agent` (virtuales), un nombre inventado y
+  `libgl1-mesa-glx` (obsoleto, sin proveedores).
+- **Resistencia a nombres que cambian entre versiones**: con un paquete
+  inexistente mezclado en el lote, `apt-get install` directo falla y no instala
+  nada; `apt_install` avisa, lo saltea e instala el resto. Comprobado de verdad
+  instalando y desinstalando.
+- `doctor.sh` corriendo **sin escritorio, sin GPU y sin `glxinfo`, `gsettings`,
+  `dconf` ni `gnome-extensions`**: completa el informe y sale con código 0.
 - La función que decide si estás en renderizado por software, probada con 9
-  cadenas reales de `glxinfo`. Incluye el caso trampa: una GPU AMD acelerada
+  cadenas reales de `glxinfo`, incluido el caso trampa: una AMD acelerada
   reporta `AMD Radeon RX 7600 (radeonsi, navi33, LLVM 17.0.6)`, que contiene
-  "LLVM" pero **no** es `llvmpipe` — se clasifica correctamente como acelerada.
-- Detección y limpieza de temas: con `WhiteSur`, `McMojave` y `Yaru` falsos en
-  `/usr/share/themes`, detecta los dos de macOS y deja Yaru intacto.
-- Limpieza de autostart: con `conky`, `plank` y `nextcloud` en
-  `~/.config/autostart`, saca solo el que corresponde.
-- Instalación real de las herramientas de terminal, verificando que los
-  binarios quedan en el `PATH`.
-- Existencia de cada paquete apt, comprobada con `apt-cache policy`.
-- Backups, idempotencia y `undo.sh`: probados de verdad, restaurando un archivo
-  y comparando `md5sum` contra el original.
+  "LLVM" pero **no** es `llvmpipe`.
+- Detección de temas: con `WhiteSur`, `McMojave` y `Yaru` falsos en
+  `/usr/share/themes`, detecta los de macOS y deja Yaru intacto.
+- Limpieza de autostart: con `conky`, `plank` y `nextcloud`, saca solo el que
+  corresponde.
+- El informe del doctor sobre un escritorio simulado (GNOME 50, 14 extensiones,
+  tema y iconos de familias distintas): lista las extensiones y detecta la
+  mezcla.
+- Backups, idempotencia y `undo.sh`: restaurando un archivo y comparando
+  `md5sum` contra el original.
 
-Lo que **no** se pudo probar por no haber escritorio ni GPU en el contenedor:
-la instalación del tema WhiteSur, las extensiones de GNOME, los `gsettings`
-reales, el `dconf dump`/`load`, los drivers de video y los cambios en GRUB.
-Esas partes están cubiertas solo por la simulación y por el análisis estático.
-Por eso: **empezá siempre con `doctor.sh` y con `--dry-run`.**
+Lo que **no** se pudo probar, porque el contenedor es 24.04 sin escritorio ni
+GPU: nada de esto corriendo sobre una **Ubuntu 26.04 real** — los nombres de
+paquete de "resolute", las unidades `localsearch-*`, las extensiones para GNOME
+50, ni el tema WhiteSur sobre libadwaita de GNOME 50. Tampoco los `gsettings`
+reales, el `dconf dump`/`load`, los drivers de video ni los cambios en GRUB.
+
+Por eso el kit está hecho para **degradar bien ante lo desconocido** en vez de
+acertarle a una lista de nombres: si un paquete no existe, lo dice y sigue; si
+no puede detectar la versión de GNOME, no la inventa. Y por eso: **empezá
+siempre con `doctor.sh` y con `--dry-run`.**

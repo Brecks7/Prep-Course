@@ -1,4 +1,4 @@
-# De Windows a Ubuntu 24.04
+# De Windows a Ubuntu
 
 Guía de referencia para consultar rápido. El material del Prep Course muestra
 todo en Windows; acá está el equivalente en Linux.
@@ -7,7 +7,7 @@ Para instalar y configurar todo automáticamente: [`setup/README.md`](setup/READ
 
 ---
 
-## Atajos de teclado (GNOME 46)
+## Atajos de teclado (GNOME 46 y posteriores)
 
 La tecla `Windows` ahora se llama `Super`.
 

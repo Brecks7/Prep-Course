@@ -145,29 +145,63 @@ perf_autostart() {
 
 # --- Tracker (indexado) ------------------------------------------------------
 perf_tracker() {
-    log_info "Desactivando el indexador de archivos (tracker)..."
+    log_info "Desactivando el indexador de archivos..."
 
-    # tracker indexa el CONTENIDO de tus archivos para buscarlos desde GNOME.
-    # Consume CPU y disco en segundo plano. Al desactivarlo perdés la búsqueda
+    # El indexador guarda el CONTENIDO de tus archivos para buscarlo desde
+    # GNOME. Consume CPU y disco de fondo. Al desactivarlo perdés la búsqueda
     # por contenido; la búsqueda por NOMBRE de archivo sigue funcionando.
+    #
+    # Ojo con los nombres: desde GNOME 47 "tracker" se llama "localsearch"
+    # (y la parte de base de datos, "tinysparql"). En GNOME 46 y anteriores son
+    # las unidades tracker-*. Probamos los dos juegos y actuamos sobre las que
+    # existan de verdad, en vez de enmascarar nombres inexistentes y dar un OK
+    # que no significa nada.
     if ! ask "¿Desactivar el indexado de contenido? (gana fluidez, perdés buscar por contenido)"; then
-        note_todo "Tracker sigue activo"
+        note_todo "El indexador sigue activo"
         return 0
     fi
 
-    if has_cmd tracker3; then
-        run tracker3 reset -s -r
-    fi
+    local candidatas=(
+        localsearch-3.service
+        localsearch-control-3.service
+        localsearch-writeback-3.service
+        tinysparql-xdg-portal-3.service
+        tracker-miner-fs-3.service
+        tracker-miner-fs-control-3.service
+        tracker-extract-3.service
+        tracker-writeback-3.service
+    )
 
-    local unidad
-    for unidad in tracker-miner-fs-3.service tracker-miner-fs-control-3.service \
-                  tracker-extract-3.service tracker-writeback-3.service; do
-        run systemctl --user mask "$unidad"
-        record_action "unidad de usuario enmascarada: $unidad"
+    local existentes=()
+    local u
+    for u in "${candidatas[@]}"; do
+        if [[ "$DRY_RUN" == "1" ]]; then
+            existentes+=("$u")
+        elif systemctl --user list-unit-files "$u" >/dev/null 2>&1 \
+             && systemctl --user list-unit-files "$u" 2>/dev/null | grep -q "$u"; then
+            existentes+=("$u")
+        fi
     done
 
-    note_ok "Indexado desactivado"
-    note_todo "Para revertir el indexado: systemctl --user unmask 'tracker-*'"
+    if [[ ${#existentes[@]} -eq 0 ]]; then
+        note_warn "No se encontró ningún servicio de indexado — no se tocó nada"
+        return 0
+    fi
+
+    # Vaciar el índice ya construido, con la herramienta que exista.
+    if has_cmd localsearch; then
+        run localsearch reset --filesystem || true
+    elif has_cmd tracker3; then
+        run tracker3 reset -s -r || true
+    fi
+
+    for u in "${existentes[@]}"; do
+        run systemctl --user mask "$u"
+        record_action "unidad de usuario enmascarada: $u"
+    done
+
+    note_ok "Indexado desactivado (${#existentes[@]} servicios)"
+    note_todo "Para revertirlo: systemctl --user unmask ${existentes[0]} (y las demás), o bash setup/undo.sh"
 }
 
 # --- GRUB --------------------------------------------------------------------
