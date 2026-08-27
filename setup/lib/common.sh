@@ -195,8 +195,16 @@ ask() {
         log_info "$1 -> sí (simulado en dry-run)"
         return 0
     fi
+    # Ojo: no alcanza con mirar [[ -t 0 ]]. Canalizar respuestas
+    # ({ echo s; yes n; } | install.sh) es un uso válido y ahí tampoco hay
+    # terminal. Lo que hay que distinguir es si read consiguió algo o llegó a
+    # EOF: sin entrada, antes se contestaba que no en silencio y el script se
+    # "cancelaba solo" sin explicar por qué.
     local respuesta
-    read -r -p "  ${C_YELLOW}?${C_RESET} $1 [s/N] " respuesta
+    if ! read -r -p "  ${C_YELLOW}?${C_RESET} $1 [s/N] " respuesta; then
+        log_warn "$1 -> no (sin entrada disponible; usá --yes para responder que sí)"
+        return 1
+    fi
     [[ "$respuesta" =~ ^[sSyY]$ ]]
 }
 

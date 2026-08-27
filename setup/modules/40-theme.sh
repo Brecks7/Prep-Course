@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# 40-theme — apariencia estilo macOS (WhiteSur).
+# 40-theme — apariencia estilo macOS.
 #
 # Los repos de vinceliuice cambian flags entre versiones, así que en vez de
 # asumir, leemos el --help de cada instalador y usamos solo los flags que
 # realmente existan. Si algo no está, caemos al modo por defecto y avisamos.
+#
+# Hay dos caminos, según lo que ya tengas puesto:
+#
+#   - Si ya usás un tema de la familia MacTahoe (macOS 26), NO se pisa: se
+#     completan solo los iconos y los cursores para que combinen. Tu modo
+#     oscuro, tu fuente y tu tema GTK quedan como están.
+#   - Si no hay nada estilo macOS, se instala WhiteSur completo.
+#
+# Pisar la configuración del usuario "porque el script sabe mejor" es
+# justamente lo que hace que la gente no confíe en estos kits.
 
 THEME_DIR="$HOME/.local/share/setup-ubuntu"
 
@@ -20,13 +30,75 @@ modulo_theme() {
 
     run mkdir -p "$THEME_DIR"
 
-    theme_gtk
-    theme_iconos
-    theme_cursores
-    theme_aplicar
+    local familia
+    familia="$(theme_familia_actual)"
+    log_info "Tema GTK actual: $(theme_gtk_actual) (familia: $familia)"
+
+    case "$familia" in
+        mactahoe)
+            log_info "Ya tenés MacTahoe aplicado. Se completan iconos y cursores; el tema, el modo oscuro y la fuente no se tocan."
+            theme_iconos_mactahoe
+            theme_cursores
+            theme_aplicar_iconos
+            ;;
+        *)
+            theme_gtk
+            theme_iconos
+            theme_cursores
+            theme_aplicar_completo
+            ;;
+    esac
 
     note_todo "Las apps nativas de GNOME (Archivos, Configuración, Calculadora...) usan libadwaita e IGNORAN los temas GTK: van a seguir viéndose como GNOME. Es una limitación del sistema, no del script."
 }
+
+# --- Detección ---------------------------------------------------------------
+
+theme_gtk_actual() {
+    gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null | tr -d "'"
+}
+
+# ¿A qué familia pertenece el tema que ya está aplicado?
+theme_familia_actual() {
+    local actual
+    actual="$(theme_gtk_actual)"
+    shopt -s nocasematch
+    local familia=ninguna
+    case "$actual" in
+        *mactahoe*|*tahoe*) familia=mactahoe ;;
+        *whitesur*)         familia=whitesur ;;
+    esac
+    shopt -u nocasematch
+    printf '%s\n' "$familia"
+}
+
+# Busca un set de iconos instalado que coincida con el patrón, prefiriendo la
+# variante oscura si el escritorio está en modo oscuro. No se hardcodea el
+# nombre porque los instaladores de vinceliuice lo cambian entre versiones.
+theme_buscar_en_iconos() {
+    local patron="$1"
+    local oscuro=0
+    [[ "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)" == *prefer-dark* ]] && oscuro=1
+
+    local dir nombre candidato=""
+    for dir in "$HOME/.local/share/icons" "$HOME/.icons" /usr/share/icons; do
+        [[ -d "$dir" ]] || continue
+        while IFS= read -r ruta; do
+            nombre="$(basename "$ruta")"
+            # Solo sirve si tiene index.theme: si no, no es un tema válido.
+            [[ -f "$ruta/index.theme" ]] || continue
+            if [[ "$oscuro" == "1" && "$nombre" == *-dark ]]; then
+                printf '%s\n' "$nombre"
+                return 0
+            fi
+            [[ -z "$candidato" ]] && candidato="$nombre"
+        done < <(find "$dir" -maxdepth 1 -iname "$patron" 2>/dev/null | sort)
+    done
+
+    [[ -n "$candidato" ]] && printf '%s\n' "$candidato"
+}
+
+# --- Instaladores ------------------------------------------------------------
 
 # Clona o actualiza un repo de tema en THEME_DIR.
 theme_clonar() {
@@ -40,6 +112,19 @@ theme_clonar() {
         log_info "Clonando $nombre..."
         run git clone --depth 1 "$url" "$destino"
     fi
+}
+
+# Varios instaladores de vinceliuice usan rutas relativas por dentro (p. ej.
+# "cp -pr dist ..."). Si se los invoca desde otro directorio fallan sin devolver
+# error. Hay que ejecutarlos parados en su propia carpeta.
+theme_ejecutar_instalador() {
+    local script="$1"; shift
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log_info "[dry] (cd $(dirname "$script") && ./$(basename "$script") $*)"
+        return 0
+    fi
+    [[ -x "$script" ]] || { log_err "No se encontró el instalador: $script"; return 1; }
+    ( cd "$(dirname "$script")" && "./$(basename "$script")" "$@" )
 }
 
 # ¿El instalador soporta este flag? Evita que un flag viejo aborte todo.
@@ -63,9 +148,9 @@ theme_gtk() {
     # --round: esquinas redondeadas
     theme_soporta_flag "$inst" '--round' && flags+=(--round)
 
-    if ! run "$inst" "${flags[@]}"; then
+    if ! theme_ejecutar_instalador "$inst" "${flags[@]}"; then
         note_warn "El instalador falló con flags; reintentando en modo por defecto"
-        run "$inst" || { note_err "No se pudo instalar el tema GTK WhiteSur"; return 1; }
+        theme_ejecutar_instalador "$inst" || { note_err "No se pudo instalar el tema GTK WhiteSur"; return 1; }
     fi
     note_ok "Tema GTK WhiteSur instalado"
 
@@ -87,10 +172,24 @@ theme_iconos() {
     local inst="$THEME_DIR/WhiteSur-icon-theme/install.sh"
 
     log_info "Instalando iconos WhiteSur..."
-    if run "$inst"; then
+    if theme_ejecutar_instalador "$inst"; then
         note_ok "Iconos WhiteSur instalados"
     else
         note_warn "No se pudieron instalar los iconos WhiteSur"
+    fi
+}
+
+# Iconos de la misma familia que MacTahoe, para que no queden mezclados con
+# los Yaru de Ubuntu.
+theme_iconos_mactahoe() {
+    theme_clonar https://github.com/vinceliuice/MacTahoe-icon-theme.git MacTahoe-icon-theme
+    local inst="$THEME_DIR/MacTahoe-icon-theme/install.sh"
+
+    log_info "Instalando iconos MacTahoe..."
+    if theme_ejecutar_instalador "$inst"; then
+        note_ok "Iconos MacTahoe instalados"
+    else
+        note_warn "No se pudieron instalar los iconos MacTahoe — se dejan los que ya tenías"
     fi
 }
 
@@ -98,15 +197,22 @@ theme_cursores() {
     theme_clonar https://github.com/vinceliuice/WhiteSur-cursors.git WhiteSur-cursors
     local inst="$THEME_DIR/WhiteSur-cursors/install.sh"
 
-    log_info "Instalando cursores WhiteSur..."
-    if run "$inst"; then
-        note_ok "Cursores WhiteSur instalados"
+    log_info "Instalando cursores estilo macOS..."
+    theme_ejecutar_instalador "$inst"
+
+    # El install.sh de WhiteSur-cursors devuelve 0 aunque el cp falle, así que
+    # no alcanza con mirar el código de salida: hay que verificar el resultado.
+    if [[ "$DRY_RUN" == "1" ]] || [[ -f "$HOME/.local/share/icons/WhiteSur-cursors/index.theme" ]]; then
+        note_ok "Cursores instalados"
     else
-        note_warn "No se pudieron instalar los cursores WhiteSur"
+        note_warn "No se pudieron instalar los cursores — se dejan los actuales"
     fi
 }
 
-theme_aplicar() {
+# --- Aplicar -----------------------------------------------------------------
+
+# Camino completo: para una máquina sin nada estilo macOS puesto.
+theme_aplicar_completo() {
     log_info "Aplicando la configuración de apariencia..."
 
     # Nombres tal como los dejan los instaladores de vinceliuice.
@@ -121,9 +227,48 @@ theme_aplicar() {
     run gsettings set org.gnome.desktop.interface document-font-name 'Inter 11'
     run gsettings set org.gnome.desktop.interface monospace-font-name 'Fira Code 11'
 
-    # Botones de ventana a la izquierda, como en macOS.
-    run gsettings set org.gnome.desktop.wm.preferences button-layout 'close,minimize,maximize:'
+    theme_botones_izquierda
 
     note_ok "Apariencia aplicada (tema, iconos, cursores, fuentes, botones a la izquierda)"
     note_todo "Si algo no se ve aplicado, abrí 'Retoques' (gnome-tweaks) y revisá la pestaña Apariencia"
+}
+
+# Camino conservador: solo iconos y cursores. No toca gtk-theme, color-scheme
+# ni las fuentes, porque el usuario ya eligió los suyos.
+theme_aplicar_iconos() {
+    log_info "Aplicando iconos y cursores..."
+
+    local iconos cursores
+    iconos="$(theme_buscar_en_iconos 'MacTahoe*')"
+    cursores="$(theme_buscar_en_iconos '*[Cc]ursors*')"
+
+    if [[ -n "$iconos" || "$DRY_RUN" == "1" ]]; then
+        run gsettings set org.gnome.desktop.interface icon-theme "${iconos:-MacTahoe}"
+        note_ok "Iconos aplicados: ${iconos:-MacTahoe}"
+    else
+        note_warn "No se encontró un set de iconos MacTahoe instalado — se dejan los actuales"
+    fi
+
+    if [[ -n "$cursores" || "$DRY_RUN" == "1" ]]; then
+        run gsettings set org.gnome.desktop.interface cursor-theme "${cursores:-WhiteSur-cursors}"
+        note_ok "Cursores aplicados: ${cursores:-WhiteSur-cursors}"
+    else
+        note_warn "No se encontraron cursores estilo macOS — se dejan los actuales"
+    fi
+
+    theme_botones_izquierda
+
+    note_todo "El tema GTK, el modo oscuro y la fuente NO se tocaron: ya los tenías configurados"
+}
+
+# Botones de ventana a la izquierda, como en macOS. Si ya están así, no hace nada.
+theme_botones_izquierda() {
+    local actual
+    actual="$(gsettings get org.gnome.desktop.wm.preferences button-layout 2>/dev/null | tr -d "'")"
+    if [[ "$actual" == *:* && "${actual%%:*}" == *close* ]]; then
+        log_ok "Los botones de ventana ya están a la izquierda"
+        return 0
+    fi
+    run gsettings set org.gnome.desktop.wm.preferences button-layout 'close,minimize,maximize:'
+    note_ok "Botones de ventana movidos a la izquierda"
 }

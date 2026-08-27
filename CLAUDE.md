@@ -27,12 +27,20 @@ Estado al 26 de agosto de 2026, según `bash setup/doctor.sh`:
   22). La regla se mantiene: siempre nvm, nunca apt, nunca `sudo npm install -g`.
 - Ya instalados: `ripgrep fzf bat btop eza zoxide` y VS Code (repo de Microsoft,
   no snap).
-- **Siguen faltando Vulkan y VA-API** — el video se decodifica en CPU.
-- 14 extensiones de GNOME habilitadas y Blur my Shell activo — es lo que más
-  probable me esté costando la fluidez del escritorio.
-- Tema `MacTahoe-Dark` con iconos `Yaru-prussiangreen`: no combinan, por eso se
-  ve mezclado.
+- **Vulkan y VA-API funcionan.** Antes el doctor los daba por ausentes, pero los
+  drivers ya estaban: lo que faltaba eran las CLI de diagnóstico. Verificado:
+  Vulkan responde `RADV NAVI10` y VA-API decodifica y **codifica** H264/HEVC por
+  hardware con `radeonsi`.
+- Apariencia coherente: tema `MacTahoe-Dark`, iconos `MacTahoe-dark`, cursores
+  `WhiteSur-cursors`, botones a la izquierda. Modo oscuro y `Ubuntu Sans` intactos.
+- **Blur my Shell desactivado.** Quedan 10 extensiones. Si sigue faltando
+  fluidez, la próxima candidata es `compiz-windows-effect`.
+- Pendiente: `swappiness` sigue en 60 (el módulo `--perf` necesita mi contraseña).
 - 24 snaps instalados.
+
+Ojo con el kit desde una sesión sin terminal: `--perf`, `--base`, `--gpu`,
+`--desnap` y `--dev` piden `sudo` y abren una ventana gráfica de contraseña que
+hay que responder a mano. `--theme` sobre un tema que ya está puesto no pide nada.
 
 ## Correr los tests del curso
 

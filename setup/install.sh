@@ -118,8 +118,27 @@ if [[ "$DRY_RUN" != "1" ]]; then
     log_info "Backups de esta corrida: $BACKUP_DIR"
 fi
 
-sudo_keepalive
-trap sudo_keepalive_stop EXIT
+# Solo pedimos sudo si algún módulo elegido lo necesita. --theme sobre un tema
+# ya instalado, por ejemplo, escribe todo en ~/.local y no lo requiere: pedir la
+# contraseña ahí deja una ventana colgada esperando a alguien que quizá no está
+# frente a la pantalla.
+NECESITA_SUDO=0
+for _m in base limpieza gpu perf desnap dev; do
+    [[ "${EJECUTAR[$_m]:-0}" == "1" ]] && NECESITA_SUDO=1
+done
+# El camino WhiteSur de --theme sí usa sudo (tweaks.sh -g para GDM); el camino
+# que solo completa iconos sobre un tema ya puesto, no.
+if [[ "${EJECUTAR[theme]:-0}" == "1" ]]; then
+    _tema_actual="$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null | tr -d "'")"
+    grep -qiE 'mactahoe|tahoe' <<<"$_tema_actual" || NECESITA_SUDO=1
+fi
+
+if [[ "$NECESITA_SUDO" == "1" ]]; then
+    sudo_keepalive
+    trap sudo_keepalive_stop EXIT
+else
+    log_info "Ningún módulo elegido necesita sudo — no se pide contraseña."
+fi
 
 # --- Ejecución ---------------------------------------------------------------
 # Cada módulo se ejecuta aislado: si uno falla, se anota y se sigue con el resto.

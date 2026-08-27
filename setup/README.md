@@ -55,12 +55,36 @@ bash setup/install.sh --dev                  # solo Node, VS Code y terminal
 | `--gpu` | Detecta la GPU e instala Mesa, Vulkan y aceleración de video |
 | `--perf` | swappiness, zram, servicios de arranque, indexado*, GRUB* |
 | `--desnap` | Firefox nativo `.deb` y elimina snapd por completo* |
-| `--theme` | Tema WhiteSur: GTK, iconos, cursores, fuentes, botones a la izquierda |
+| `--theme` | Apariencia macOS. Si ya tenés MacTahoe puesto, solo completa iconos y cursores; si no hay nada, instala WhiteSur entero |
 | `--extensions` | Dash to Dock, Blur my Shell, Just Perfection, efecto genio |
 | `--dev` | Node vía nvm, VS Code, `rg`/`fzf`/`bat`/`btop`/`eza`/`zoxide`, git |
 | `--claude` | Claude Code CLI y un `CLAUDE.md` para el repo |
 
 `*` requiere `--aggressive`.
+
+## Sobre `--theme` y tu configuración actual
+
+El módulo mira qué tema GTK tenés aplicado antes de tocar nada:
+
+- **Ya usás algo de la familia MacTahoe** (macOS 26) → instala solo los iconos y
+  los cursores que combinan. No toca `gtk-theme`, ni el modo oscuro, ni la
+  fuente. Eso es tuyo y ya lo elegiste.
+- **No hay nada estilo macOS** → instala WhiteSur completo (tema, iconos,
+  cursores, fuentes).
+
+Antes pisaba siempre con WhiteSur-Light, lo que te sacaba del modo oscuro y te
+cambiaba la fuente sin avisar.
+
+## Correrlo sin terminal
+
+Si lo lanzás desde un editor, un agente o un pipe, tené en cuenta dos cosas:
+
+- Las preguntas se contestan que **no** si no hay entrada disponible, y el script
+  lo dice en vez de cancelarse en silencio. Para responder que sí a todo: `--yes`.
+  Para responder distinto a cada una: `{ echo s; yes n; } | bash setup/install.sh --perf`
+- Los módulos que necesitan `sudo` abren una ventana gráfica de contraseña que
+  hay que responder **a mano, frente a la pantalla**. `--theme` sobre un tema ya
+  instalado no pide nada.
 
 ## Banderas
 
