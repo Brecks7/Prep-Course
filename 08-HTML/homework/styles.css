@@ -1,0 +1,82 @@
+/* Ejercicio III: todas las reglas de estilo del ejercicio II, movidas acá */
+
+/* --- Crédito adicional: imagen de fondo y centrado con flexbox --- */
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* Imagen de fondo de toda la página */
+  background-image: url("https://i.picsum.photos/id/1015/1600/900.jpg");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+
+  /* Flexbox para centrar los div en la página */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 40px 16px;
+  box-sizing: border-box;
+}
+
+/* Centrar todos los elementos dentro de cada div */
+.divClass,
+#thirdDiv {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background-color: rgba(255, 255, 255, 0.85);
+  border-radius: 8px;
+}
+
+.divClass {
+  padding: 20px 30px;
+}
+
+/* E. Color del texto del h1 */
+h1 {
+  color: darkslateblue;
+}
+
+/* F. Ancho de las imágenes */
+img {
+  width: 400px;
+  max-width: 100%;
+}
+
+/* G. Alto y ancho del tercer div */
+/* H. Color de fondo del tercer div */
+/* K. Relleno del tercer div */
+/* L. Borde del tercer div */
+#thirdDiv {
+  height: 600px;
+  width: 500px;
+  background-color: lightsteelblue;
+  padding: 50px;
+  border: 4px solid darkslateblue;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+#thirdDiv ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* I. Tamaño de fuente del span */
+/* J. Margen del span */
+#spanId {
+  font-size: 18px;
+  margin: 50px;
+  display: inline-block;
+}

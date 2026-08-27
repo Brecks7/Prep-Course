@@ -7,32 +7,87 @@ archivo en cualquiera de estas carpetas, estás en el lugar equivocado.
 
 /* Arrancaremos este ejercicio por vos: */
 #ejercicioUno {
-
+  /* text-align solo funciona en elementos de bloque, y un span es inline */
+  display: block;
+  text-align: center;
 }
 
 
 /* Ejercicio 2: Posicionar el header */
 
 /* Acá va tu código */
-
+/* No se puede tocar el HTML, así que lo sacamos de la página desde el CSS.
+   display: none lo saca del flujo (visibility: hidden dejaría el hueco de 50px) */
+#ejercicioDos {
+  display: none;
+}
 
 
 /* Ejercicio 3: */
 
 /* Acá va tu código */
-
+/* El contenedor azul ya es position: relative, así que las coordenadas de la
+   imagen se miden desde su esquina. La caja roja arranca en top 95px / left 195px
+   más 5px de borde: el contenido empieza justo en 100px / 200px */
+#ejercicioTres {
+  position: absolute;
+  top: 100px;
+  left: 200px;
+  width: 400px;
+  height: 300px;
+}
 
 
 /* Ejercicio 4: */
 
 /* Acá va tu código */
-
+/* fixed (y no absolute) para que no se mueva al scrollear */
+#ejercicioCuatro {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+}
 
 
 /* Ejercicio 5: */
 
 /* Acá va tu código */
+/* space-between reparte el espacio sobrante entre los elementos;
+   align-items: center los centra verticalmente en los 70px del header */
+/* Ejercicio 6: en el HTML el orden es #SoyHenry, logo, Lecciones.
+   row-reverse los da vuelta sin tocar el HTML: Lecciones queda a la izquierda
+   y #SoyHenry a la derecha */
+#ejercicioCinco {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+}
 
+#ejercicioCinco img {
+  height: 40px;
+}
 
 
 /* Ejercicio 6. */
+
+/* Resuelto arriba, junto con el ejercicio 5: flex-direction: row-reverse */
+
+
+/* Ejercicio 7: playground de flexbox */
+
+#ejercicioSiete {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  align-items: center;
+}
+
+#elementoUno {
+  align-self: flex-start;
+}
+
+#elementoCuatro {
+  align-self: flex-end;
+}
