@@ -11,6 +11,46 @@ seguidas con el mismo bug.
 
 ---
 
+## Dónde retomar (última actualización: 30 de agosto de 2026, mañana)
+
+Árbol de git limpio, todo commiteado (`dbfe89c`).
+
+**Listo y verificado en pantalla**: el fantasma al minimizar, el toggle del dock
+(ubicación y acción), el portapapeles dentro del hub, y las cuatro apps nuevas
+(Chrome, Krita, LibreSprite, Pixelorama).
+
+**Lo único pendiente de verse**: el toggle **Dock** y el ítem **Portapapeles** son
+código nuevo de extensión, así que aparecen recién en el **próximo inicio de
+sesión**. No hay que cerrar sesión a propósito; cuando toque, verificar:
+
+1. Abrir el hub → tiene que estar **Dock · Fijo** (antes de "Estilo oscuro") y
+   **Portapapeles** con el historial.
+2. Apagar **Dock** → el dock se esconde y vuelve al empujar el borde de abajo.
+3. Minimizar dos o tres ventanas → escritorio limpio, sin semáforos grises
+   flotando. El guard ya no depende de Eval: entra con `mactahoe-tweaks`.
+
+**Ojo con una cosa**: el guard que está corriendo *ahora* se inyectó en caliente
+por Eval y **muere con la sesión**. Eso no es un problema —el mismo guard está
+instalado en `~/.local/share/gnome-shell/extensions/mactahoe-tweaks@son.local/`
+y arranca solo en el próximo login—, pero si al volver aparece un fantasma, lo
+primero a mirar es si `mactahoe-tweaks` quedó `ACTIVE`:
+
+```bash
+gnome-extensions info mactahoe-tweaks@son.local | grep Estado
+```
+
+**Pendientes reales**, ninguno urgente:
+
+- El ruido de PaperWM en el journal (`Meta.BackgroundActor ... already disposed`,
+  traza en `utils.js:567` / `grab.js:441`). No rompe nada visible.
+- Averiguar por qué el `showHandler` parcheado de PaperWM no corre para las
+  ventanas que dejaban fantasma. El guard propio ya cubre el síntoma, así que es
+  curiosidad técnica, no un bug abierto.
+- Si alguna Flatpak no abre después de un login:
+  `systemctl --user restart xdg-document-portal` antes que cualquier otra cosa.
+
+---
+
 ## Sesión del 30 de agosto de 2026 (mañana) — el fantasma, cerrado
 
 ### Lo que el parche de PaperWM no atajaba
