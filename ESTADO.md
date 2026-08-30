@@ -11,6 +11,73 @@ seguidas con el mismo bug.
 
 ---
 
+## Sesión del 30 de agosto de 2026 (mañana) — el fantasma, cerrado
+
+### Lo que el parche de PaperWM no atajaba
+
+Con unsafe mode habilitado (`Alt+F2` → `lg` → `global.context.unsafe_mode = true`)
+se pudo medir el minimizado **en la sesión viva**, sin reiniciar: sondas en el
+`WindowActor` desde `org.gnome.Shell.Eval`. La secuencia real al minimizar una
+ventana de PaperWM es:
+
+    hide  →  show (minimized ya en true)  →  notify::minimized
+
+y ese `show` se repite **tres veces**. El actor terminaba en `vis=true` con
+`min=true` — el fantasma, medido, no deducido. El clone estaba en `false`, así
+que la sospecha quedó confirmada: **es el actor real**.
+
+El parche a `showHandler` de PaperWM está bien puesto pero **no llega a correr**
+para esas ventanas, así que el guard se mudó a código propio:
+`mactahoe-tweaks@son.local/ghostGuard.js`. Regla única: *una ventana minimizada
+no se dibuja*. Si el shell está animando el minimizado (`Main.wm._minimizing`)
+no esconde nada y reintenta en el próximo idle, para no cortar la animación
+nativa si algún día se saca `macos-genie`.
+
+Al restaurar no interfiere, y no es casualidad: ahí el orden se invierte
+(`notify::minimized` con false llega **antes** del `show`). Verificado
+minimizando y restaurando con el guard puesto.
+
+**Verificación**: cinco ventanas minimizadas a la vez (Steam, Calculadora,
+Configuración, terminal, Editor de texto) → las cinco `vis=false`, y los dos
+monitores limpios en la captura. La ventana nueva (Editor de texto, abierta
+después del guard) también quedó cubierta, vía `window-created`.
+
+El parche `paperwm-show-minimizado.patch` se deja aplicado: es correcto y no
+molesta, pero **el que ataja es el guard propio**.
+
+### Portapapeles dentro del hub
+
+`clipboardQuick.js`: la barra tenía un solo icono suelto de verdad —
+`ClipboardIndicator`; el resto (Astra Monitor, grabación, accesibilidad, fuente
+de entrada) mide 0 y no se ve, y GSConnect ya vive adentro. Ahora ese icono se
+esconde y en el hub aparece **Portapapeles**, un `QuickMenuToggle` que lista lo
+último copiado leyendo el registro JSON de Clipboard Indicator
+(`~/.cache/clipboard-indicator@tudmotu.com/registry.txt`) y copia con
+`St.Clipboard`.
+
+Se probó antes la vía obvia —esconder el icono y abrir su menú— y **no sirve**:
+un `PopupMenu` no se muestra si su `sourceActor` está oculto. Medido en pantalla,
+no supuesto.
+
+### Toggle del dock: ubicación y acción verificadas
+
+- **Ubicación**: se insertó un `QuickToggle` de prueba en el hub vivo con
+  `_addItemsBefore(..., qs._darkMode.quickSettingsItems[0], 1)` y se capturó:
+  aparece como **Dock · Fijo**, justo antes de "Estilo oscuro". Es la misma ruta
+  que usa `quickToggle.js`.
+- **Acción**: con `gsettings set … macosdock auto-hide true` el dock desaparece
+  de la captura, y con `false` vuelve. O sea que `dockManager` reacciona en
+  caliente y el botón sólo tiene que dar vuelta esa gsetting.
+
+### Estado de esta sesión
+
+El guard del fantasma está **activo en caliente** (inyectado por Eval), así que
+no hay fantasma ahora mismo. El código de las extensiones —guard, portapapeles y
+toggle del dock— entra solo en el **próximo inicio de sesión**, sin apuro: no
+hace falta cerrar sesión para trabajar.
+
+---
+
 ## Sesión del 30 de agosto de 2026 (madrugada)
 
 ### 1. El fantasma al minimizar — causa encontrada, fix aplicado

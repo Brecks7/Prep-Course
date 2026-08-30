@@ -1,5 +1,7 @@
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {ClipboardQuick} from './clipboardQuick.js';
+import {GhostGuard} from './ghostGuard.js';
 import {MenuBlur} from './menuBlur.js';
 import {PanelStyle} from './panelStyle.js';
 import {WorkspaceToggle} from './workspaceToggle.js';
@@ -16,9 +18,23 @@ export default class MacTahoeTweaks extends Extension {
 
         this._workspaceToggle = new WorkspaceToggle(this._settings);
         this._workspaceToggle.enable();
+
+        // Ventanas minimizadas que se siguen dibujando (ver ghostGuard.js).
+        this._ghostGuard = new GhostGuard();
+        this._ghostGuard.enable();
+
+        // El portapapeles pasa de icono suelto en la barra a ítem del hub.
+        this._clipboardQuick = new ClipboardQuick();
+        this._clipboardQuick.enable();
     }
 
     disable() {
+        this._clipboardQuick?.disable();
+        this._clipboardQuick = null;
+
+        this._ghostGuard?.disable();
+        this._ghostGuard = null;
+
         this._workspaceToggle?.disable();
         this._workspaceToggle = null;
 
