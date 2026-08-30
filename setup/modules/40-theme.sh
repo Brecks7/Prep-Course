@@ -211,6 +211,95 @@ theme_cursores() {
 
 # --- Aplicar -----------------------------------------------------------------
 
+# --- Fuentes -----------------------------------------------------------------
+#
+# Hasta el 29 de agosto de 2026 este módulo seteaba `Inter` y `Fira Code` sin
+# instalarlas. Pango no avisa cuando no encuentra una familia: cae al fallback
+# (Noto Sans) en silencio, así que `gsettings get` devolvía 'Inter 11' y la
+# pantalla mostraba otra cosa. Por eso "la fuente sigue en Ubuntu Sans" quedó
+# como pendiente sin resolver durante semanas. Ahora se instalan primero y se
+# verifica que Pango las resuelva de verdad.
+
+# Descarga una fuente de un release de GitHub a ~/.local/share/fonts (sin sudo).
+theme_instalar_fuente_github() {
+    local repo="$1" patron="$2" destino="$3" glob="$4"
+    local dir="$HOME/.local/share/fonts/$destino"
+
+    if [[ -d "$dir" ]] && [[ -n "$(ls -A "$dir" 2>/dev/null)" ]]; then
+        log_ok "Fuente $destino ya instalada"
+        return 0
+    fi
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log_info "[dry] descargar $repo -> $dir"
+        return 0
+    fi
+    if ! has_cmd curl || ! has_cmd unzip || ! has_cmd jq; then
+        note_warn "Faltan curl/unzip/jq — no se pudo instalar la fuente $destino"
+        return 1
+    fi
+
+    local url tmp
+    url="$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null \
+        | jq -r --arg p "$patron" '.assets[] | select(.name|test($p;"i")) | .browser_download_url' \
+        | head -1)"
+    if [[ -z "$url" ]]; then
+        note_warn "No encontré el zip de $destino en $repo"
+        return 1
+    fi
+
+    tmp="$(mktemp -d)"
+    if ! curl -fsSL "$url" -o "$tmp/f.zip"; then
+        rm -rf "$tmp"; note_warn "Falló la descarga de $destino"; return 1
+    fi
+    unzip -q "$tmp/f.zip" -d "$tmp/x" 2>/dev/null
+    mkdir -p "$dir"
+    # shellcheck disable=SC2044
+    find "$tmp/x" -type f -name "$glob" -exec cp {} "$dir/" \; 2>/dev/null
+    rm -rf "$tmp"
+
+    if [[ -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
+        note_warn "El zip de $destino no traía archivos $glob"
+        return 1
+    fi
+    has_cmd fc-cache && fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1
+    record_action "fuente instalada: $destino"
+    note_ok "Fuente instalada: $destino"
+}
+
+# Pregunta a Pango — que es quien lee gsettings — qué carga de verdad para esa
+# especificación. Si devuelve otra familia, la fuente no está y el ajuste miente.
+theme_fuente_resuelve() {
+    local spec="$1" familia="${1%% [0-9]*}"
+    has_cmd python3 || return 0   # sin python3 no podemos verificar; no bloquea
+    python3 - "$spec" "$familia" <<'PY' 2>/dev/null
+import sys
+try:
+    import gi
+    gi.require_version("Pango", "1.0"); gi.require_version("PangoCairo", "1.0")
+    from gi.repository import Pango, PangoCairo
+except Exception:
+    sys.exit(0)   # sin bindings, no bloqueamos
+fm = PangoCairo.FontMap.get_default()
+f = fm.load_font(fm.create_context(), Pango.FontDescription.from_string(sys.argv[1]))
+got = f.describe().to_string() if f else ""
+sys.exit(0 if got.lower().startswith(sys.argv[2].lower()) else 1)
+PY
+}
+
+# Setea la fuente sólo si Pango la resuelve; si no, avisa en vez de mentir.
+theme_set_fuente() {
+    local schema="$1" clave="$2" spec="$3"
+    if [[ "$DRY_RUN" == "1" ]]; then
+        run gsettings set "$schema" "$clave" "$spec"
+        return 0
+    fi
+    if theme_fuente_resuelve "$spec"; then
+        run gsettings set "$schema" "$clave" "$spec"
+    else
+        note_warn "Pango no resuelve '$spec' — dejo $clave como estaba (la fuente no está instalada)"
+    fi
+}
+
 # Camino completo: para una máquina sin nada estilo macOS puesto.
 theme_aplicar_completo() {
     log_info "Aplicando la configuración de apariencia..."
@@ -222,10 +311,17 @@ theme_aplicar_completo() {
     run gsettings set org.gnome.desktop.interface color-scheme   'default'
 
     # Fuente: Inter es libre y es lo más parecido a SF Pro (la de Apple, que no
-    # se puede redistribuir, así que el script no la descarga).
-    run gsettings set org.gnome.desktop.interface font-name          'Inter 11'
-    run gsettings set org.gnome.desktop.interface document-font-name 'Inter 11'
-    run gsettings set org.gnome.desktop.interface monospace-font-name 'Fira Code 11'
+    # se puede redistribuir). Se instalan primero: setearlas sin instalarlas
+    # deja el ajuste puesto y la pantalla con otra fuente, sin ningún aviso.
+    theme_instalar_fuente_github "rsms/inter"       '^Inter-.*\.zip$'   "Inter"     "*.otf"
+    theme_instalar_fuente_github "tonsky/FiraCode"  'Fira_?Code.*\.zip$' "FiraCode"  "*.ttf"
+
+    theme_set_fuente org.gnome.desktop.interface font-name           'Inter 11'
+    theme_set_fuente org.gnome.desktop.interface document-font-name  'Inter 11'
+    theme_set_fuente org.gnome.desktop.interface monospace-font-name 'Fira Code 11'
+    # Ojo con el nombre del peso: 'Inter Semi Bold' (con espacio) NO lo resuelve
+    # Pango y cae a Noto Sans. El que funciona es 'Inter SemiBold'.
+    theme_set_fuente org.gnome.desktop.wm.preferences titlebar-font  'Inter SemiBold 11'
 
     theme_botones_izquierda
 

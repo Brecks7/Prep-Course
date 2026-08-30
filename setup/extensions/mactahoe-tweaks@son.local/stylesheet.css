@@ -1,0 +1,38 @@
+/* La hoja de una extensión se carga después del tema, así que estas reglas
+ * ganan sin tocar ~/.themes/MacTahoe-Dark, que se pisaría en la próxima
+ * actualización del tema.
+ *
+ * Por qué hace falta: MacTahoe deja `.popup-menu-content` en
+ * rgba(36, 36, 36, 0.92). Con el fondo al 92% de opacidad el desenfoque queda
+ * tapado y no se ve nada. Bajarlo es lo que hace visible el blur. */
+
+.popup-menu-content {
+  background-color: rgba(36, 36, 36, 0.55);
+}
+
+/* El hub de arriba a la derecha. El tema ya lo dejaba casi transparente
+ * (rgba(0, 0, 0, 0.01)) dando por hecho un blur que hasta ahora no existía;
+ * ese 1% con desenfoque detrás queda lavado, así que le damos algo de tinte. */
+.quick-settings {
+  background-color: rgba(36, 36, 36, 0.45);
+}
+
+/* Barra superior. El trabajo pesado lo hace panelStyle.js con estilo inline,
+ * que es lo único que le gana con certeza al `!important` que Yaru mete en
+ * /usr/share/gnome-shell/theme/Yaru/gnome-shell-dark.css:
+ *
+ *     #panel { background-color: #131313 !important; }
+ *
+ * Esta regla es la red de seguridad por si el inline se pierde en alguna
+ * transición: empata en importancia con la de Yaru y gana por orden, porque las
+ * hojas de las extensiones se cascadean después de la hoja del modo de sesión.
+ * El valor tiene que coincidir con el default de `panel-background`. */
+#panel {
+  background-color: rgba(0, 0, 0, 0.30) !important;
+}
+
+/* En la vista de actividades el fondo ya está oscurecido por el shell: si acá
+ * también tintáramos, la barra quedaría más negra que el resto. */
+#panel:overview {
+  background-color: transparent !important;
+}

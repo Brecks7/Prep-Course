@@ -1,0 +1,112 @@
+/* macOS-style dock stylesheet */
+
+/* Raíz del dock. Es más alta que el rectángulo visible: la diferencia es la
+ * holgura por donde suben los iconos magnificados. Tiene que ser invisible y no
+ * capturar nada, o se comería los clics de las ventanas que haya debajo. */
+.macos-dock-root {
+  background: transparent;
+  border: none;
+}
+
+/* El rectángulo redondeado que se ve. Color, opacidad y radio los pone
+ * _applyDockStyle() desde gsettings. */
+.macos-dock-container {
+  /* Styles are applied dynamically via _applyDockStyle() */
+}
+
+/* La fila de iconos, encima del rectángulo y del mismo tamaño. Sólo espacia;
+ * no pinta. El padding y el spacing los pone _applyDockStyle(). */
+.macos-dock-iconbox {
+  background: transparent;
+}
+
+.macos-dock-icon {
+  background: transparent;
+  cursor: pointer;
+}
+
+.macos-dock-icon:hover {
+  background: transparent;
+}
+
+.macos-dock-icon-keyboard-focus {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+
+.macos-dock-icon-gicon {
+  icon-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+}
+
+.macos-dock-indicator-box {
+  spacing: 3px;
+  margin-top: 2px;
+}
+
+.macos-dock-indicator-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+.macos-dock-indicator-bar {
+  width: 16px;
+  height: 3px;
+  border-radius: 1.5px;
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+/* Tooltip */
+.macos-dock-tooltip {
+  background-color: rgba(30, 30, 30, 0.9);
+  color: white;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+/* Context Menu */
+.macos-dock-context-menu {
+  background-color: rgba(40, 40, 40, 0.95);
+  border-radius: 8px;
+  padding: 4px 0;
+  min-width: 120px;
+}
+
+.macos-dock-context-menu-item {
+  padding: 8px 16px;
+  color: white;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  margin: 0 4px;
+}
+
+.macos-dock-context-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.macos-dock-context-menu-item:active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Separator */
+.macos-dock-separator {
+  background-color: rgba(255, 255, 255, 0.3);
+  margin: 0 4px;
+}
+
+/* Applications Button */
+.macos-dock-app-button {
+  background: transparent;
+  cursor: pointer;
+}
+
+.macos-dock-app-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.macos-dock-app-button-icon {
+  icon-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+}

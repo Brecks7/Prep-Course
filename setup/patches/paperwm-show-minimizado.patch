@@ -1,0 +1,26 @@
+--- a/tiling.js
++++ b/tiling.js
+@@ -4764,6 +4764,23 @@
+ */
+ export function showHandler(actor) {
+     let metaWindow = actor.meta_window;
++
++    // PARCHE LOCAL (ver setup/README.md). Invariante: una ventana minimizada no
++    // se dibuja, ni por su actor ni por su clone. Sin esto queda la "ventana
++    // fantasma": makeScratch() hace move_resize_frame() sobre una ventana ya
++    // minimizada (scratch.js, rama minimized), el cliente commitea un buffer
++    // nuevo y mutter vuelve a mostrar el actor. Aca abajo eso no lo tapaba
++    // nadie: isWindowAnimating() es false porque el clone esta oculto, asi que
++    // no se llamaba a animateWindow() y el actor real se quedaba pintado, sin
++    // foco (semaforo gris) y sin teclado.
++    // El guard de _minimizing respeta la animacion de minimizado en curso: ahi
++    // el actor tiene que seguir visible hasta que el efecto termine.
++    if (metaWindow.minimized && !Main.wm._minimizing.has(actor)) {
++        metaWindow.clone?.cloneActor?.hide();
++        actor.hide();
++        return;
++    }
++
+     let onActive = metaWindow.get_workspace() === workspaceManager.get_active_workspace();
+ 
+     if (!metaWindow.clone.get_parent() && !metaWindow.unmapped)

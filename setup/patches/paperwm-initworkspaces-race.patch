@@ -1,0 +1,30 @@
+--- a/tiling.js
++++ b/tiling.js
+@@ -149,7 +149,27 @@
+ 
+     workspaceSettings = new WorkspaceSettings(extension);
+     spaces = new Spaces();
++    // Instancia de esta pasada por enable(), para que el callback asincrono de
++    // mas abajo sepa si sigue siendo el vigente. `spaces` es del modulo, no de
++    // esta closure: sin esta referencia, un enable posterior lo reemplaza y el
++    // callback viejo inicializaria el Spaces nuevo por segunda vez.
++    const spacesAtEnable = spaces;
+     let initWorkspaces = () => {
++        // PARCHE LOCAL (ver setup/README.md). upgradeGnomeMonitors resuelve por
++        // D-Bus de forma asincrona, y disable() no puede cancelar una llamada ya
++        // en vuelo: solo limpia startupTimeoutId. Si GNOME deshabilita PaperWM
++        // entre el pedido y la respuesta -- pasa en cada arranque, y con dos
++        // monitores la ventana de carrera es mas ancha -- este callback corre
++        // contra un Spaces ya destruido, cuyo .signals quedo en null. El try de
++        // abajo se traga esa excepcion y PaperWM sigue vivo pero a medio armar:
++        // sin las señales de init() conectadas y con Spaces rotos. Sintomas: la
++        // ventana minimizada no sale del cloneContainer (queda dibujada) y el
++        // clickOverlay queda mal mapeado entre monitores.
++        if (spaces !== spacesAtEnable || !spacesAtEnable.signals) {
++            console.warn('#PaperWM initWorkspaces: Spaces ya destruido, se aborta ' +
++                         '(enable/disable en carrera con el callback D-Bus)');
++            return;
++        }
+         try {
+             spaces.init();
+         } catch (e) {

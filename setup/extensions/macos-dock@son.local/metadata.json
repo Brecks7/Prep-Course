@@ -1,0 +1,9 @@
+{
+  "uuid": "macos-dock@son.local",
+  "name": "MacOS Dock (parcheado)",
+  "description": "Fork de MacOS Dock v7 (vinnytherobot) con cuatro arreglos: el rectángulo y la fila de iconos son actores distintos, así el icono magnificado ya no se sale ni se descuadra; el desenfoque respeta el border-radius; la magnificación no se desincroniza al abrir o cerrar apps y deja de correr a 60fps cuando no hay nada que animar; y los iconos que se van se destruyen de verdad. Al tener UUID propio NO recibe actualizaciones de extensions.gnome.org: para actualizar hay que rehacer el fork.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "settings-schema": "org.gnome.shell.extensions.macosdock",
+  "url": "https://github.com/vinnytherobot/MacOSDock",
+  "version": 1
+}

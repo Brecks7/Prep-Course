@@ -29,6 +29,30 @@ La tecla `Windows` ahora se llama `Super`.
 Los escritorios virtuales son lo mejor que vas a encontrar viniendo de Windows.
 Uno para el editor, otro para el navegador, otro para lo demás.
 
+### PaperWM: por qué no podés arrastrar las esquinas
+
+En esta máquina está **PaperWM**, que cambia la regla más básica que traés de Windows:
+las ventanas ya no flotan, se acomodan solas en una **tira horizontal** por la que te
+desplazás. La contrapartida es que **el tamaño lo decide el gestor**, no el mouse — por eso
+arrastrar una esquina no hace nada. No es un bug ni una opción apagada: es cómo funciona un
+gestor en mosaico.
+
+Cuando necesitás una ventana "de Windows", que se estire libre desde cualquier esquina,
+existe la **capa flotante**:
+
+| Atajo | Qué hace |
+|---|---|
+| **`Super` + `Escape`** | Saca la ventana enfocada a flotante — **ahí sí se arrastra desde las esquinas** |
+| `Super` + `Shift` + `Escape` | Muestra u oculta todas las flotantes |
+| `Super` + `+` / `-` | Ancho de la ventana, dentro de la tira |
+| `Super` + `Shift` + `+` / `-` | Alto de la ventana, dentro de la tira |
+| `Super` + `F` | Ocupar todo el ancho |
+| `Super` + `Shift` + `F` | Pantalla completa |
+| `Super` + `Shift` + `W` | Cambiar hacia qué lado se abre la próxima ventana |
+
+Es lo más parecido a tener las dos cosas: la tira para trabajar, y `Super`+`Escape` para el
+rato en que necesitás mover una ventana a mano.
+
 ---
 
 ## Atajos de terminal

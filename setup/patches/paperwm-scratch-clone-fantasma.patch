@@ -1,0 +1,30 @@
+--- a/scratch.js
++++ b/scratch.js
+@@ -80,8 +80,26 @@
+     metaWindow.make_above();
+     metaWindow.stick();  // NB! Removes the window from the tiling (synchronously)
+ 
+-    if (!metaWindow.minimized)
++    if (!metaWindow.minimized) {
+         Tiling.showWindow(metaWindow);
++    } else {
++        // PARCHE LOCAL (ver setup/README.md). `showWindow` hace dos cosas:
++        // esconde el cloneActor del cloneContainer y vuelve a mostrar el actor
++        // real. Saltearla entera cuando la ventana esta minimizada solo era
++        // correcto para la segunda mitad -- el actor real no debe reaparecer --
++        // pero el clone sigue apuntando al actor via `cloneActor.source`, y un
++        // Clutter.Clone pinta su fuente aunque el original este oculto. Asi que
++        // al minimizar una ventana tiled quedaba dibujada una copia sobre el
++        // escritorio: la "ventana fantasma", con los botones del titulo en gris
++        // porque el foco ya se habia ido, que solo desaparecia al rehacer el
++        // layout (por eso arrastrarla la "cerraba"). Soltamos el clone sin
++        // tocar el actor real.
++        const cloneActor = metaWindow.clone?.cloneActor;
++        if (cloneActor) {
++            cloneActor.hide();
++            cloneActor.source = null;
++        }
++    }
+ 
+     if (fromTiling) {
+         let f = metaWindow.get_frame_rect();

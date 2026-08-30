@@ -1,0 +1,10 @@
+{
+  "uuid": "mactahoe-tweaks@son.local",
+  "name": "MacTahoe Tweaks",
+  "description": "Tres cosas que ninguna extensión publicada hace en Ubuntu 26.04: forzar el fondo de la barra superior por encima del `!important` de Yaru, blur en los menús del panel (Quick Settings, calendario, indicadores) y un atajo para saltar entre el escritorio 1 y el 2. Complementa a Blur my Shell, no la reemplaza.",
+  "shell-version": [
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.mactahoe-tweaks",
+  "version": 2
+}

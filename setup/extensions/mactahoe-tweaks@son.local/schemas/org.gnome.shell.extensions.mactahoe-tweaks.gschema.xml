@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.mactahoe-tweaks"
+          path="/org/gnome/shell/extensions/mactahoe-tweaks/">
+
+    <key name="toggle-workspace" type="as">
+      <default><![CDATA[['<Super>space']]]></default>
+      <summary>Saltar entre el escritorio 1 y el 2</summary>
+    </key>
+
+    <key name="menu-blur-radius" type="i">
+      <default>60</default>
+      <range min="0" max="200"/>
+      <summary>Radio del desenfoque de los menús</summary>
+    </key>
+
+    <key name="menu-blur-brightness" type="d">
+      <default>0.62</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Brillo del desenfoque de los menús</summary>
+    </key>
+
+    <key name="panel-background" type="s">
+      <default>'rgba(0, 0, 0, 0.30)'</default>
+      <summary>Fondo de la barra superior</summary>
+      <description>
+        Cualquier color CSS que entienda St. Se aplica como estilo inline sobre
+        #panel, que es lo único que le gana al `!important` de Yaru. Poner
+        'transparent' para transparencia total; si además el blur está apagado,
+        el texto blanco puede volverse ilegible sobre fondos claros.
+      </description>
+    </key>
+
+    <key name="panel-blur-radius" type="i">
+      <default>30</default>
+      <range min="0" max="200"/>
+      <summary>Radio del desenfoque de la barra superior</summary>
+      <description>
+        0 apaga el desenfoque propio. Poner 0 si se prefiere que lo haga el
+        componente `panel` de Blur my Shell, para no desenfocar dos veces.
+      </description>
+    </key>
+
+    <key name="panel-blur-brightness" type="d">
+      <default>0.65</default>
+      <range min="0.0" max="1.0"/>
+      <summary>Brillo del desenfoque de la barra superior</summary>
+    </key>
+
+  </schema>
+</schemalist>

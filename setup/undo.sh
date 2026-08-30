@@ -118,6 +118,25 @@ if [[ -f "$OBJETIVO/acciones.txt" ]]; then
                     && log_ok "reactivada: $ext" \
                     || log_warn "no se pudo reactivar: $ext"
                 ;;
+            "extensión instalada: "*)
+                # No se desinstala: alcanza con apagarla, y así no se pierde la
+                # configuración por si el usuario quiere volver a probarla.
+                ext="${accion#extensión instalada: }"
+                gnome-extensions disable "$ext" 2>/dev/null \
+                    && log_ok "desactivada: $ext" \
+                    || log_warn "no se pudo desactivar: $ext"
+                ;;
+            "extensión local instalada: "*)
+                # Esta sí se borra: no vino de extensions.gnome.org, la copió el
+                # kit desde el repo, así que nadie más la va a echar de menos.
+                ext="${accion#extensión local instalada: }"
+                gnome-extensions disable "$ext" 2>/dev/null || true
+                if rm -rf "$HOME/.local/share/gnome-shell/extensions/$ext"; then
+                    log_ok "eliminada: $ext"
+                else
+                    log_warn "no se pudo eliminar: $ext"
+                fi
+                ;;
         esac
     done < "$OBJETIVO/acciones.txt"
 fi
@@ -167,7 +186,12 @@ printf '    gsettings reset org.gnome.desktop.interface gtk-theme\n'
 printf '    gsettings reset org.gnome.desktop.wm.preferences button-layout\n\n'
 
 printf '  %sVolver al dock de Ubuntu%s:\n' "$C_BOLD" "$C_RESET"
-printf '    gnome-extensions disable dash-to-dock@micxgx.gmail.com\n'
+printf '    gnome-extensions disable macos-dock@son.local\n'
 printf '    gnome-extensions enable ubuntu-dock@ubuntu.com\n\n'
+
+printf '  %sVolver al MacOS Dock sin parchear%s (el de extensions.gnome.org):\n' "$C_BOLD" "$C_RESET"
+printf '    gnome-extensions disable macos-dock@son.local\n'
+printf '    gnome-extensions enable macos-dock@vinnytherobot.github.io\n'
+printf '    (comparten schema, así que la configuración se mantiene)\n\n'
 
 printf 'Cerrá sesión y volvé a entrar para ver los cambios.\n\n'

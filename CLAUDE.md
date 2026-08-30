@@ -21,22 +21,35 @@ Soy estudiante y estoy aprendiendo. Cuando me ayudes con un ejercicio:
 - 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
 - Editor: VS Code.
 
-Estado al 26 de agosto de 2026, según `bash setup/doctor.sh`:
+Estado corto (el detalle y la bitácora completa están en `ESTADO.md`):
 
-- **Node instalado con nvm**, 24.20.0 por defecto (también quedaron la 16, 18 y
-  22). La regla se mantiene: siempre nvm, nunca apt, nunca `sudo npm install -g`.
-- Ya instalados: `ripgrep fzf bat btop eza zoxide` y VS Code (repo de Microsoft,
-  no snap).
-- **Vulkan y VA-API funcionan.** Antes el doctor los daba por ausentes, pero los
-  drivers ya estaban: lo que faltaba eran las CLI de diagnóstico. Verificado:
-  Vulkan responde `RADV NAVI10` y VA-API decodifica y **codifica** H264/HEVC por
-  hardware con `radeonsi`.
-- Apariencia coherente: tema `MacTahoe-Dark`, iconos `MacTahoe-dark`, cursores
-  `WhiteSur-cursors`, botones a la izquierda. Modo oscuro y `Ubuntu Sans` intactos.
-- **Blur my Shell desactivado.** Quedan 10 extensiones. Si sigue faltando
-  fluidez, la próxima candidata es `compiz-windows-effect`.
-- Pendiente: `swappiness` sigue en 60 (el módulo `--perf` necesita mi contraseña).
-- 24 snaps instalados.
+- **Node por nvm**, 24.20.0 por defecto. Nunca apt, nunca `sudo npm install -g`.
+- Instalados: `ripgrep fzf bat btop eza zoxide`, VS Code (repo de Microsoft),
+  Chrome (`.deb` oficial), y por Flatpak Krita, LibreSprite y Pixelorama.
+- **Vulkan y VA-API funcionan** (RADV NAVI10; H264/HEVC por hardware con
+  `radeonsi`), `swappiness` en 10.
+- Escritorio: tema `MacTahoe-Dark`, dock propio (`macos-dock@son.local`),
+  `mactahoe-tweaks@son.local`, PaperWM parcheado, Blur my Shell, efecto genie al
+  minimizar.
+
+## No trabajes a ciegas con el escritorio
+
+Dos diagnósticos anteriores de este repo estaban equivocados por leer CSS en vez
+de píxeles. Hay tres scripts para evitarlo, y conviene usarlos **antes** de
+afirmar por qué algo se ve como se ve:
+
+```bash
+bash setup/shot.sh --probe 300,0,60      # RGB de una columna de la pantalla
+bash setup/shot.sh --wait 6 --crop 560,960,800,120
+bash setup/shell-sandbox.sh mactahoe-tweaks@son.local   # GNOME Shell headless
+bash setup/watch-shell.sh                # journal del shell, filtrado
+```
+
+En Wayland `grim` no sirve (es de wlroots) y `org.gnome.Shell.Screenshot` por
+D-Bus devuelve `AccessDenied`; la vía que funciona es el portal de escritorio,
+que es lo que usa `shot.sh`. Y desde GNOME 50 no se puede recargar una extensión
+en vivo: `ReloadExtension` responde `is deprecated and does not work`, así que o
+se prueba en el sandbox o hay que cerrar sesión.
 
 Ojo con el kit desde una sesión sin terminal: `--perf`, `--base`, `--gpu`,
 `--desnap` y `--dev` piden `sudo` y abren una ventana gráfica de contraseña que
