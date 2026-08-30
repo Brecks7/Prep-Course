@@ -25,6 +25,11 @@ export class DockVisibility {
     _hideTimeoutId = null;
     _barrier = null;
     _pressureBarrier = null;
+    // Y de reposo del contenedor, la que manda dockManager._updatePosition().
+    // Las animaciones parten y vuelven de acá en vez de leer container.y: si se
+    // lee el actor, una transición interrumpida deja la Y corrida y el dock
+    // baja 20 px más en cada ciclo.
+    _shownY = null;
     _edge; // 0=bottom, 1=left, 2=right, 3=top
     constructor(container, intellihide, _dockHeight, _marginBottom, animationDuration = 200, showThreshold = 25, edge = 0) {
         this._signals = new SignalManager();
@@ -47,8 +52,14 @@ export class DockVisibility {
             console.error("[macos-dock] No primary monitor available");
             return;
         }
-        // Hide the dock by making it invisible.
+        // Hide the dock by making it invisible. El estado de animación arranca
+        // limpio: si quedó una transición a medias de un ciclo anterior, su
+        // onComplete no corre nunca y _isAnimating se queda en true, que es lo
+        // que traba _show() para siempre.
+        this._container.remove_all_transitions();
+        this._isAnimating = false;
         this._container.visible = false;
+        this._container.opacity = 255;
         this._isShown = false;
         this._intellihide.start((overlap) => {
             if (overlap && this._isShown) {
@@ -84,13 +95,26 @@ export class DockVisibility {
         this._destroyBarrier();
         this._signals.disconnectAll();
         this._intellihide.stop();
+        this._container.remove_all_transitions();
+        this._isAnimating = false;
+        if (this._shownY !== null)
+            this._container.y = this._shownY;
         this._container.visible = true;
         this._container.opacity = 255;
     }
     isHidden() {
         return !this._isShown;
     }
-    updateShownY(_y) { }
+    updateShownY(y) {
+        this._shownY = y;
+        // Si el dock está a la vista y quieto, seguir la posición nueva.
+        if (this._isShown && !this._isAnimating)
+            this._container.y = y;
+    }
+    /** La Y de reposo, con el actor como respaldo si todavía no llegó ninguna. */
+    _restY() {
+        return this._shownY ?? this._container.y;
+    }
     _createBarrier() {
         if (!this._monitor || this._barrier)
             return;
@@ -99,23 +123,41 @@ export class DockVisibility {
         // empuja. Para el borde de abajo se empuja hacia -Y, o sea subiendo el
         // puntero contra el tope de la pantalla desde arriba: mutter cuenta la
         // presión en la dirección contraria al lado libre.
+        //
+        // El eje transversal va sobre el área de trabajo y recortado 1 px en
+        // cada punta, que es lo que hace ubuntu-dock (docking.js, "minus 1 px
+        // to avoid conflicting with other active corners"). A lo ancho completo
+        // del monitor las puntas pisan los hot corners, y con un segundo
+        // monitor pegado al costado la punta `m.x + m.width` ya es la primera
+        // columna del monitor de al lado, donde esa Y no es borde de pantalla.
+        const wa = Main.layoutManager.getWorkAreaForMonitor(m.index) ?? m;
         let x1, y1, x2, y2, directions;
         switch (this._edge) {
             case 1: // Left
-                x1 = m.x; y1 = m.y; x2 = m.x; y2 = m.y + m.height;
+                x1 = m.x + 1; x2 = x1;
+                y1 = wa.y + 1; y2 = wa.y + wa.height - 1;
                 directions = Meta.BarrierDirection.POSITIVE_X;
                 break;
             case 2: // Right
-                x1 = m.x + m.width; y1 = m.y; x2 = m.x + m.width; y2 = m.y + m.height;
+                x1 = m.x + m.width - 1; x2 = x1;
+                y1 = wa.y + 1; y2 = wa.y + wa.height - 1;
                 directions = Meta.BarrierDirection.NEGATIVE_X;
                 break;
             case 3: // Top
-                x1 = m.x; y1 = m.y; x2 = m.x + m.width; y2 = m.y;
+                y1 = m.y; y2 = y1;
+                x1 = wa.x + 1; x2 = wa.x + wa.width - 1;
                 directions = Meta.BarrierDirection.POSITIVE_Y;
                 break;
             default: // Bottom
-                x1 = m.x; y1 = m.y + m.height; x2 = m.x + m.width; y2 = m.y + m.height;
+                y1 = m.y + m.height; y2 = y1;
+                x1 = wa.x + 1; x2 = wa.x + wa.width - 1;
                 directions = Meta.BarrierDirection.NEGATIVE_Y;
+        }
+        // Una barrera degenerada no falla: no dispara nunca, en silencio.
+        if (x1 === x2 && y1 === y2) {
+            console.error(`[macos-dock] barrera vacía en el borde ${this._edge} ` +
+                `(monitor ${m.x},${m.y} ${m.width}x${m.height}) — no se crea`);
+            return;
         }
         // El constructor cambió en GNOME 46: antes `display`, ahora `backend`.
         // Probamos el nuevo primero y caemos al viejo, en vez de mirar la
@@ -141,6 +183,7 @@ export class DockVisibility {
         }
         this._pressureBarrier = new Layout.PressureBarrier(PRESSURE_THRESHOLD, PRESSURE_TIMEOUT, Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW);
         this._pressureBarrier.connect("trigger", () => {
+            console.debug("[macos-dock] barrera disparada — revelando el dock");
             this._cancelHide();
             this._show();
             // Si la barrera disparó pero el puntero nunca entra al dock (pasó de
@@ -148,6 +191,8 @@ export class DockVisibility {
             this._scheduleHide();
         });
         this._pressureBarrier.addBarrier(this._barrier);
+        console.debug(`[macos-dock] barrera de presión en (${x1},${y1})-(${x2},${y2}) ` +
+            `umbral ${PRESSURE_THRESHOLD}px/${PRESSURE_TIMEOUT}ms`);
     }
     _destroyBarrier() {
         if (this._pressureBarrier) {
@@ -198,20 +243,26 @@ export class DockVisibility {
         if (this._isShown || this._isAnimating)
             return;
         this._isShown = true;
-        this._isAnimating = true;
+        // Con el dock a la vista la barrera sólo estorba: frenaría el puntero
+        // contra un borde que ya no hay nada que revelar. Se recrea al
+        // esconderlo, igual que en ubuntu-dock.
+        this._destroyBarrier();
+        const restY = this._restY();
+        this._container.remove_all_transitions();
         if (this._animationDuration === 0) {
+            this._container.y = restY;
             this._container.visible = true;
             this._container.opacity = 255;
             this._isAnimating = false;
             return;
         }
+        this._isAnimating = true;
         this._container.visible = true;
         this._container.opacity = 0;
         // Slide up animation + fade in
-        const startY = this._container.y;
-        this._container.y = startY + 20;
+        this._container.y = restY + 20;
         this._container.ease({
-            y: startY,
+            y: restY,
             opacity: 255,
             duration: this._animationDuration,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
@@ -224,22 +275,30 @@ export class DockVisibility {
         if (!this._isShown || this._isAnimating)
             return;
         this._isShown = false;
-        this._isAnimating = true;
+        const restY = this._restY();
+        this._container.remove_all_transitions();
         if (this._animationDuration === 0) {
             this._container.visible = false;
+            this._container.y = restY;
+            this._container.opacity = 255;
             this._isAnimating = false;
+            this._createBarrier();
             return;
         }
-        const startY = this._container.y;
+        this._isAnimating = true;
         this._container.ease({
-            y: startY + 20,
+            y: restY + 20,
             opacity: 0,
             duration: this._animationDuration,
             mode: Clutter.AnimationMode.EASE_IN_QUAD,
             onComplete: () => {
                 this._container.visible = false;
-                this._container.y = startY;
+                this._container.y = restY;
+                this._container.opacity = 255;
                 this._isAnimating = false;
+                // El dock volvió a estar oculto: sin barrera no hay forma de
+                // pedirlo de nuevo.
+                this._createBarrier();
             },
         });
     }
