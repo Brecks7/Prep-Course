@@ -152,11 +152,18 @@ parchar_paperwm() {
     #     `move_resize_frame` que makeScratch hace sobre una ventana minimizada).
     #     Resultado: la ventana minimizada seguía dibujada, sin foco — el
     #     semáforo en gris es cómo se la reconoce.
+    #  4. timeout-ventana-muerta: el que tiraba la sesión. El handler de
+    #     `workspace-changed` deja corriendo un timeout de hasta 1 s que
+    #     redimensiona la ventana; si la ventana se destruye en el medio (el
+    #     splash de Discord dura ~990 ms), el `move_resize_frame` corre sobre
+    #     una MetaWindow que mutter ya está desmanejando y el shell se cae con
+    #     SIGSEGV. Se lleva puesta la sesión entera, no sólo PaperWM.
     local base="$HOME/.local/share/gnome-shell/extensions/paperwm@paperwm.github.com"
     local -a parches=(
         "tiling.js|paperwm-initworkspaces-race.patch|spacesAtEnable"
         "scratch.js|paperwm-scratch-clone-fantasma.patch|PARCHE LOCAL"
         "tiling.js|paperwm-show-minimizado.patch|_minimizing.has(actor)"
+        "tiling.js|paperwm-timeout-ventana-muerta.patch|timeout sobre ventana"
     )
 
     if [[ ! -d "$base" ]]; then

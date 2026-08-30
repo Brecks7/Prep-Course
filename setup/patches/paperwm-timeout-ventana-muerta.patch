@@ -1,0 +1,44 @@
+--- a/tiling.js
++++ b/tiling.js
+@@ -3570,6 +3570,12 @@
+      */
+     const done = t => {
+         const index = workspaceChangeTimeouts.indexOf(t);
++        // PARCHE LOCAL (ver setup/README.md). indexOf devuelve -1 cuando el
++        // timeout ya no está en la lista, y splice(-1, 1) borra el último —
++        // es decir, el timeout de otra ventana.
++        if (index < 0) {
++            return;
++        }
+         workspaceChangeTimeouts.splice(index, 1);
+         // console.log(`num workspaceChangeTimeouts ${workspaceChangeTimeouts.length}`);
+     };
+@@ -3583,6 +3589,28 @@
+                 period_ms: 100,
+                 count: 10,
+                 callback: () => {
++                    // PARCHE LOCAL (ver setup/README.md): timeout sobre ventana
++                    // muerta. Este timeout vive hasta un segundo (100 ms x 10)
++                    // después del 'workspace-changed', y en ese rato la ventana
++                    // se puede destruir sola — el caso medido es el splash de
++                    // Discord, que se cierra a los ~990 ms de arrancar. Cuando
++                    // eso pasa, el move_resize_frame() de abajo corre sobre una
++                    // MetaWindow que mutter ya está desmanejando y el shell se
++                    // cae con SIGSEGV, lo que rebota la sesión entera.
++                    // Sin actor de composición no hay ventana viva que
++                    // redimensionar: devolver false corta el timeout (early
++                    // exit de Utils.periodic_timeout) y dispara onComplete, así
++                    // que tampoco queda colgado en workspaceChangeTimeouts.
++                    try {
++                        if (!metaWindow || !metaWindow.get_compositor_private()) {
++                            return false;
++                        }
++                    } catch (e) {
++                        // El GObject ya fue desalojado: tocarlo tira acá en vez
++                        // de segfaultear, y el timeout tiene que morir igual.
++                        return false;
++                    }
++
+                     const f = metaWindow.get_frame_rect();
+                     if (metaWindow._targetHeight !== f.height) {
+                         if (!isNaN(metaWindow._targetHeight)) {
