@@ -1,5 +1,6 @@
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
+import {BlurControl} from './blurControl.js';
 import {ClipboardQuick} from './clipboardQuick.js';
 import {GhostGuard} from './ghostGuard.js';
 import {MenuBlur} from './menuBlur.js';
@@ -28,6 +29,10 @@ export default class MacTahoeTweaks extends Extension {
         this._clipboardQuick = new ClipboardQuick();
         this._clipboardQuick.enable();
 
+        // Interruptor de la transparencia de las ventanas, también en el hub.
+        this._blurControl = new BlurControl(this._settings);
+        this._blurControl.enable();
+
         // Va último: colapsa la barra a un solo botón, y para eso necesita que
         // los indicadores que se mudan al hub ya estén puestos.
         this._panelDeclutter = new PanelDeclutter(this.path);
@@ -37,6 +42,9 @@ export default class MacTahoeTweaks extends Extension {
     disable() {
         this._panelDeclutter?.disable();
         this._panelDeclutter = null;
+
+        this._blurControl?.disable();
+        this._blurControl = null;
 
         this._clipboardQuick?.disable();
         this._clipboardQuick = null;

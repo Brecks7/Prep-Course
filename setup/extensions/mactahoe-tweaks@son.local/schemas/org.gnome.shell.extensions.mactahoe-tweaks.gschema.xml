@@ -8,6 +8,24 @@
       <summary>Saltar entre el escritorio 1 y el 2</summary>
     </key>
 
+    <key name="toggle-blur" type="as">
+      <default><![CDATA[['<Super>b']]]></default>
+      <summary>Encender o apagar la transparencia de las ventanas</summary>
+      <description>
+        Da vuelta `blur` de blur-my-shell (componente `applications`). El mismo
+        interruptor está en el hub, como el toggle "Transparencia".
+      </description>
+    </key>
+
+    <key name="blur-excluir-ventana" type="as">
+      <default><![CDATA[['<Shift><Super>b']]]></default>
+      <summary>Quitarle o devolverle la transparencia a la ventana enfocada</summary>
+      <description>
+        Agrega o saca el `wm_class` de la ventana enfocada de la `blacklist` de
+        blur-my-shell. Es el mismo gesto en los dos sentidos.
+      </description>
+    </key>
+
     <key name="menu-blur-radius" type="i">
       <default>60</default>
       <range min="0" max="200"/>

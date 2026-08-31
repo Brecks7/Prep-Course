@@ -70,6 +70,24 @@ bash setup/gshell.sh find macos-dock-root
   (`mactahoe-tweaks/ghostGuard.js`), no en el parche de PaperWM: ese parche está
   bien puesto pero **no llega a correr** para esas ventanas. Regla única: una
   ventana minimizada no se dibuja.
+- **La transparencia de las ventanas tiene interruptor.** Toggle
+  "Transparencia" en el hub (`blurControl.js` de `mactahoe-tweaks`): el cuerpo
+  prende y apaga el componente `applications` de Blur my Shell, y el menú saca de
+  la transparencia a la ventana enfocada o la devuelve. Atajos `Super+B` y
+  `Super+Shift+B`. Verificado en la sesión viva: con la opción prendida Blur my
+  Shell tiene 3 ventanas con efecto, con la opción apagada 0, y el botón aparece
+  en el hub con su subtítulo ("Salvo 3") — comprobado en píxeles.
+
+- **Blur my Shell ya no acumula ventanas.** Bug propio de esa extensión, no
+  nuestro: `update_all_windows()` sacaba el efecto con `remove_blur()` pero
+  dejaba la entrada en `meta_window_map`, y enseguida volvía a registrar todo con
+  un `bms_pid` nuevo al azar. Cada cambio de la lista de exclusión sumaba 5
+  entradas y no sacaba ninguna (medido: 5 → 10 → 15, la misma ventana 12 veces),
+  con sus señales duplicadas encima. Parcheado en sitio y versionado en
+  `setup/patches/blur-my-shell-mapa-de-ventanas-que-crece.patch`; queda en 3
+  entradas para 3 ventanas, estable a lo largo de seis ciclos. Importa porque el
+  toggle nuevo invita a usar justo ese camino.
+
 - **La barra de arriba a la derecha tiene un solo botón**, donde había cinco
   iconos: 132 px → 60 px, medido. Los cinco no eran indicadores sueltos, viven
   adentro del hub, así que se esconde la caja entera y se pone un icono propio.

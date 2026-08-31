@@ -1,0 +1,51 @@
+--- a/components/applications.js
++++ b/components/applications.js
+@@ -182,10 +182,33 @@
+ 
+         // remove all previously blurred windows, in the case where the
+         // whitelist was changed
++        //
++        // PARCHE LOCAL (ver setup/README.md). Aca habia `remove_blur(pid)`, que
++        // saca el efecto pero deja la entrada en `meta_window_map` -- lo dice el
++        // comentario de `untrack_meta_window`: "kinda the same as remove_blur,
++        // but better: it also untracks the window". Cuatro lineas mas abajo,
++        // `track_new()` vuelve a registrar TODAS las ventanas con un bms_pid
++        // nuevo sacado de Math.random(), sin mirar si ya estaban; su propio
++        // contrato dice "Accepts only untracked meta windows (i.e no bms_pid
++        // set)", que es justo lo que no se cumplia.
++        //
++        // Resultado medido en esta maquina: con 3 ventanas abiertas y 5
++        // rastreadas, cada cambio de blacklist sumaba 5 entradas al mapa y no
++        // sacaba ninguna (5 -> 10 -> 15, la misma ventana 12 veces). Como
++        // `track_new` ademas reconecta las señales de cada ventana, los
++        // handlers de 'size-changed' y compañia tambien se acumulaban: un
++        // resize terminaba disparando update_size N veces.
+         this.meta_window_map.forEach(((_meta_window, pid) => {
+-            this.remove_blur(pid);
++            this.untrack_meta_window(pid);
+         }));
+ 
++        // PARCHE LOCAL, segunda mitad. Una ventana pegajosa (`stick()`) figura
++        // en la lista de TODOS los workspaces, asi que este doble bucle le
++        // pasaba la misma ventana a `track_new` una vez por workspace y
++        // terminaba con varias entradas y varios efectos de blur encima del
++        // mismo actor. Medido: 5 entradas para 3 ventanas, con PaperWM, que
++        // deja ventanas pegajosas. Se saltea lo ya visto en esta misma pasada.
++        const vistas = new Set();
+         for (
+             let i = 0;
+             i < global.workspace_manager.get_n_workspaces();
+@@ -194,7 +217,12 @@
+             let workspace = global.workspace_manager.get_workspace_by_index(i);
+             let windows = workspace.list_windows();
+ 
+-            windows.forEach(meta_window => this.track_new(meta_window));
++            windows.forEach(meta_window => {
++                if (vistas.has(meta_window))
++                    return;
++                vistas.add(meta_window);
++                this.track_new(meta_window);
++            });
+         }
+     }
+ 

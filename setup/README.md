@@ -167,6 +167,27 @@ falta fluidez, el orden para ir apagando componentes es `applications` (blur
 dinámico por ventana, el más caro), después `overview`, y recién al final el
 resto.
 
+**El interruptor está en el hub**, junto al del dock: el toggle "Transparencia"
+(`blurControl.js` de `mactahoe-tweaks`). El cuerpo del botón enciende y apaga el
+componente `applications` de Blur my Shell — que es el más caro de todos, así que
+también sirve como freno de mano cuando falta fluidez. El menú de la flecha saca
+de la transparencia a la ventana que tengas enfocada, y lista lo excluido para
+devolverlo de a uno.
+
+Excluir **por ventana enfocada** en vez de con una lista escrita a mano es lo que
+evita tener que averiguar el `wm_class` de nada: te parás sobre la app que
+molesta y la sacás. El campo que se guarda es exactamente el que compara Blur my
+Shell (`components/applications.js` mira `meta_window.get_wm_class()` contra los
+patrones de `blacklist`). Los mismos dos gestos tienen atajo: `Super+B` prende y
+apaga, `Super+Shift+B` excluye o devuelve la ventana enfocada.
+
+Un detalle de implementación que vale la pena saber si se copia el patrón: el
+schema de Blur my Shell **no está en el path global de gsettings**, vive en la
+carpeta de esa extensión. Hay que cargarlo con
+`Gio.SettingsSchemaSource.new_from_directory`, porque un
+`new Gio.Settings({schema_id})` sobre un schema que no existe no tira una
+excepción que se pueda atrapar: **aborta el proceso de gnome-shell entero**.
+
 **La barra superior: la trampa del `!important` de Yaru.** Ubuntu 26.04 trae
 esta regla en `/usr/share/gnome-shell/theme/Yaru/gnome-shell-dark.css`:
 
@@ -502,17 +523,44 @@ manejo de ventanas entero. Si molesta:
 gnome-extensions disable paperwm@paperwm.github.com
 ```
 
-### Los parches locales a PaperWM
+### Los parches locales a extensiones de terceros
 
-PaperWM es de terceros, así que no hay fork con UUID propio como con el dock: se
-parchea **en sitio**, sobre `~/.local/share/gnome-shell/extensions/paperwm@…`, y
-el diff queda guardado en `setup/patches/` para poder reaplicarlo después de una
-actualización. Cada parche lleva un comentario `PARCHE LOCAL` en el código.
+PaperWM y Blur my Shell son de terceros, así que no hay fork con UUID propio como
+con el dock: se parchean **en sitio**, sobre
+`~/.local/share/gnome-shell/extensions/…`, y el diff queda guardado en
+`setup/patches/` para poder reaplicarlo después de una actualización. Cada parche
+lleva un comentario `PARCHE LOCAL` en el código.
 
 | Parche | Qué arregla |
 |---|---|
 | `paperwm-initworkspaces-race.patch` | El callback D-Bus de `upgradeGnomeMonitors` corriendo contra un `Spaces` ya destruido |
 | `paperwm-scratch-clone-fantasma.patch` | La "ventana fantasma" al minimizar |
+| `blur-my-shell-mapa-de-ventanas-que-crece.patch` | El registro de ventanas que crecía sin techo en cada cambio de la lista de exclusión |
+
+**El mapa de ventanas que crecía.** `update_all_windows()` de
+`components/applications.js` corre cada vez que cambia la lista de apps
+excluidas. Empezaba llamando a `remove_blur(pid)` para cada ventana rastreada,
+que saca el efecto pero **deja la entrada en `meta_window_map`** — lo dice el
+comentario del propio código, que describe a `untrack_meta_window` como "kinda
+the same as remove_blur, but better: it also untracks the window". Cuatro líneas
+más abajo volvía a llamar a `track_new()` para todas las ventanas, y `track_new`
+asigna un `bms_pid` nuevo sacado de `Math.random()` sin mirar si esa ventana ya
+estaba: su contrato dice "Accepts only untracked meta windows (i.e no `bms_pid`
+set)", que es justo lo que no se cumplía.
+
+Medido acá con 3 ventanas abiertas: cada cambio de la lista sumaba 5 entradas y
+no sacaba ninguna — 5 → 10 → 15, la misma ventana repetida 12 veces. Como
+`track_new` además reconecta las señales de cada ventana, los handlers de
+`size-changed` y compañía se acumulaban igual, así que un solo resize terminaba
+disparando `update_size` una vez por copia.
+
+El parche tiene dos mitades. La primera cambia `remove_blur` por
+`untrack_meta_window`, y con eso el mapa deja de crecer: se estabiliza en 5. La
+segunda ataca ese 5 con 3 ventanas — el doble bucle recorre los workspaces uno
+por uno, y una ventana pegajosa (`stick()`, que es lo que hace PaperWM) figura en
+la lista de todos, así que la misma ventana se registraba varias veces en la
+misma pasada. Salteando lo ya visto queda en **3 entradas para 3 ventanas, 0
+repetidas, estable a lo largo de seis ciclos de exclusión**.
 
 **La ventana fantasma.** Al minimizar cualquier ventana quedaba dibujada una
 copia sobre el escritorio, con los tres botones del título en gris; se podía
