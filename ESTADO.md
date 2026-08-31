@@ -14,7 +14,7 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 
 ## Dónde retomar
 
-Rama `claude/linux-ubuntu-windows-migration-whc0li`, **14 commits adelante de
+Rama `claude/linux-ubuntu-windows-migration-whc0li`, **21 commits adelante de
 `origin`**: falta pushear. Está trabado por afuera del
 repo: esta máquina no tiene con qué autenticarse contra GitHub — no hay `gh`, no
 hay `credential.helper` configurado y no hay claves SSH, así que `git push` muere
