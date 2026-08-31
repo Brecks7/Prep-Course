@@ -54,7 +54,8 @@ journalctl -b -1 -p err                    # qué pasó en el arranque anterior
 ```
 
 `gshell.sh --help` los explica todos. Las trampas que cuestan una sesión si no se
-saben están en `ESTADO.md`, sección «Cómo mirar el escritorio».
+saben están en `setup/README.md`, sección «Cómo mirar el escritorio sin trabajar a
+ciegas».
 
 ## El kit de setup (`setup/`)
 

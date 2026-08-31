@@ -824,3 +824,51 @@ Por eso el kit está hecho para **degradar bien ante lo desconocido** en vez de
 acertarle a una lista de nombres: si un paquete no existe, lo dice y sigue; si
 no puede detectar la versión de GNOME, no la inventa. Y por eso: **empezá
 siempre con `doctor.sh` y con `--dry-run`.**
+
+---
+
+## Cómo mirar el escritorio sin trabajar a ciegas
+
+Dos diagnósticos de este repo salieron mal por leer CSS en vez de píxeles, y
+varias sesiones se fueron en volver a descubrir cómo hablarle al shell.
+
+```bash
+bash setup/gshell.sh check                 # ¿unsafe mode prendido?
+bash setup/gshell.sh find macos-dock-root  # un actor: posición, tamaño, visible
+bash setup/gshell.sh tree 2                # árbol de actores visibles
+bash setup/gshell.sh pointer 960 400       # mover el puntero (Wayland)
+bash setup/gshell.sh push bottom           # empujar un borde hasta la barrera
+bash setup/gshell.sh patch <js> <Clase>     # recargar código sin cerrar sesión
+bash setup/shot.sh --probe 300,0,60        # RGB de una columna: los píxeles
+bash setup/shot.sh --crop 700,980,520,100  # un recorte de la pantalla
+bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless, sin arriesgar
+bash setup/watch-shell.sh                  # journal del shell, filtrado
+```
+
+Lo que hay que saber antes de usarlos:
+
+- **`Eval` sólo responde con unsafe mode**, que se prende a mano una vez por
+  sesión (`Alt+F2` → `lg` → `global.context.unsafe_mode = true`) y muere con el
+  logout. Adentro de `Eval` **no se puede importar `Main`** (la UI del shell es
+  ESM): a los objetos se llega caminando `global.stage`. `imports.gi.*` sí anda.
+- **El árbol de actores dice qué cree el shell, no qué se dibujó.** Para píxeles,
+  `shot.sh`. En Wayland `grim` no sirve y `org.gnome.Shell.Screenshot` por D-Bus
+  da `AccessDenied`; la vía que funciona es el portal, que es lo que usa `shot.sh`.
+- **Una extensión sí se recarga en vivo, aunque `ReloadExtension` esté muerto**
+  (responde `is deprecated and does not work`). La vía es `gshell.sh patch`:
+  adentro de `Eval`, `import('file://<ruta>')` devuelve el módulo **ya cargado**
+  por el shell, y la misma ruta con otra query (`?v=<ts>`) lo relee del disco;
+  copiando los métodos del segundo prototipo al primero, las instancias vivas
+  pasan a correr el código nuevo. Esto sacó el logout por iteración, que era el
+  gasto más grande del proyecto.
+  Lo que **no** cubre: el `constructor` ya corrió y `enable()` también, así que
+  los campos y las señales conectadas quedan como estaban — alcanza sólo a
+  métodos del prototipo. Para un cambio en `start()` o en el constructor, sigue
+  siendo sandbox o logout.
+- Los `console.debug` de las extensiones los descarta GLib salvo que
+  `G_MESSAGES_DEBUG` incluya el dominio `Gjs` — `gshell.sh debug` lo prende en
+  caliente.
+- El kit desde una sesión sin terminal: `--perf`, `--base`, `--gpu`, `--desnap` y
+  `--dev` piden `sudo` y abren una ventana gráfica de contraseña.
+- Si una Flatpak no abre después de un login:
+  `systemctl --user restart xdg-document-portal` antes que cualquier otra cosa.

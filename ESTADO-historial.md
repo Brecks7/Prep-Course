@@ -816,3 +816,99 @@ Relato completo de tres cosas ya cerradas, resumidas allá a una línea:
   adentro del hub, así que se esconde la caja entera y se pone un icono propio.
 - **Flatpaks, Discord por `.deb`, fuentes, atajos**: todo cerrado. El detalle en
   `ESTADO-historial.md`.
+
+
+## RGB — hardware identificado (31/08/2026)
+
+Rescatado de transcripts viejos, que era el único lugar donde vivía. El plan
+operativo está en `~/.claude/plans/`, bloque 3.
+
+**El RGB es un frente pendiente, con el hardware ya identificado.** El objetivo,
+en palabras del usuario: prender, apagar y cambiar el color de todo desde un solo
+lado. Lo que hay, verificado en la máquina:
+
+| Qué | Cómo se llega |
+|---|---|
+| Placa **MSI X670E GAMING PLUS WIFI (MS-7E16)**, Mystic Light | HID por USB `0db0:0076` → OpenRGB |
+| GPU **ASUS** Navi 21 (subsistema `1043:04fa`) — Aura | SMBus → OpenRGB, pide `i2c-dev` cargado |
+| Dos tiras **`LEDDMX-03-885E`** (`AC:C2:01:7C:88:5E`) y **`-815E`** (`AC:C2:01:DC:81:5E`) | BLE, ya Paired+Trusted en el adaptador `84:9E:56:03:57:D0`. El USB sólo les da corriente |
+
+Las tiras son familia **ELK-BLEDOM**: servicio `0000ffe0`, se escribe en la
+característica `ffe1`, color `7e 00 05 03 RR GG BB 00 ef` y on/off
+`7e 00 04 f0|00 …ef`. Hay variantes de firmware: **el primer paso es confirmar
+esos paquetes contra una tira**, no darlos por buenos.
+
+Hoy no hay nada instalado: `openrgb` no está (candidato de apt `0.9+git20251009`,
+y hay Flatpak `org.openrgb.OpenRGB`), `bleak` tampoco, y `i2c-dev` **no hace falta cargarlo**: en el kernel 7.0 de Ubuntu 26.04 viene
+compilado adentro, no como módulo — por eso no aparece en `lsmod` pero sí
+existen los 21 nodos `/dev/i2c-*`. El bus `i2c_piix4` también está. Forma pensada: CLI `rgbctl` en venv
+propio bajo `setup/bin/rgb/` (nunca `sudo pip`), empaquetado como
+`setup/modules/70-rgb.sh` con su entrada en `install.sh`, `undo.sh` y `doctor.sh`,
+y un `QuickMenuToggle` en el hub que lo llame con `Gio.Subprocess` **asíncrono**
+—una llamada BLE bloqueante adentro del shell congela el escritorio un segundo.
+Aviso que vale una sesión: escribir por SMBus a los módulos de RAM puede colgar el
+bus; si la detección no ve la RAM se prueba `acpi_enforce_resources=lax` y no se
+fuerza más.
+
+
+## Dock — evidencia de los tres arreglos (30–31/08/2026)
+
+Resumido en `ESTADO.md`; acá queda la medición completa.
+
+- **El dock se revela y se esconde sin derivar.** Diez ciclos por el dispositivo
+  virtual de Clutter: las diez revela, se queda mientras el puntero está encima,
+  esconde al irse, y la Y de reposo queda en **987 exacto en las diez** — la
+  deriva de 20 px por ciclo está muerta. Las tres causas (barrera mal puesta,
+  `_isAnimating` colgado, animaciones leyendo `container.y`) están en
+  `setup/README.md`. **Si se toca el mouse durante la tanda la prueba miente**:
+  el puntero físico pisa al virtual, y el test bueno descarta el ciclo si el
+  puntero se corrió más de 40 px de donde lo dejó.
+- **El dock se esconde de nuevo.** Los `enter-event`/`leave-event` colgados de la
+  raíz eran código muerto: es `reactive: false` a propósito y Clutter no le manda
+  cruces (medido: 0 en la raíz contra 4 en el icon box). Ahora `_scheduleHide()`
+  mira dónde está el puntero y se reagenda mientras siga encima.
+- **El revelado ya no pide un empujón de 100 px.** Era la causa del «se revela
+  una vez y después no»: la presión que cuenta mutter es cuánto **te habrías
+  pasado de largo**, no cuánto recorriste hasta el borde. El primer gesto —un
+  barrido desde el medio de la pantalla— da 15 choques y dispara; el segundo, con
+  el puntero ya cerca del borde, da uno o dos y acumula ~18 px, y con umbral 100
+  no dispara nunca. Barrido de valores con el mismo gesto: 100, 40 y 20 no
+  revelan; 10, 5 y 1 sí. El roce lateral pegado al borde no dispara con ninguno,
+  así que el falso positivo que justificaba el umbral alto no existe. Default 5,
+  configurable como `reveal-threshold`. En el sandbox el `enable()` completo
+  imprime `umbral 5px/1000ms`.
+- **El clic en el icono cicla, y empieza por la ventana de tu monitor.** Lo que
+  había devolvía la primera del orden de apilado, sin relación con dónde estás
+  mirando: con dos terminales, una por monitor, clickeás en la pantalla izquierda
+  y aparece la de la derecha. Verificado: cinco clics alternando 0→1→0→1→0 con el
+  foco siguiendo, y el orden invirtiéndose al mover el puntero al otro monitor.
+  **El cursor no salta**: medido antes y después en siete clics y dos
+  `activate()` directos, no se movió ni una vez. Quien mueve ventanas entre
+  monitores es PaperWM, que se las lleva a su monitor al restaurarlas y le gana a
+  `move_to_monitor()`.
+
+
+## Steam fuera del snap y Windows achicado (31/08/2026)
+
+Resumido en `ESTADO.md`; acá el detalle de cómo se hizo y qué se verificó.
+
+- **Steam salió del snap y tiene carpeta propia.** El snap corría un Mesa 25.2.2
+  (content-snap `gaming-graphics-core24`) contra el 26.0.8 del sistema, y un shader
+  compilado por ese RADV viejo colgó la GPU el 31/08 (`UTCL2 client ID: SQC (data)`
+  → ring timeout → reset → Xwayland caído). Ningún canal del snap llega al Mesa del
+  sistema, así que la brecha se reabría con cada actualización de Ubuntu. Ahora es
+  `steam-installer` de multiverse (el `.deb` de Valve, i386 habilitado), instalado
+  entero en **`~/Juegos/Steam`** con `~/.steam/{steam,root}` y `~/.local/share/Steam`
+  apuntando ahí. Los 83 GB se copiaron con `rsync` (salida 0), no se re-descargaron,
+  y las rutas de `libraryfolders.vdf` quedaron reescritas. Verificado: el cliente
+  arranca desde la ruta nueva, con `fsync: up and running` y Fossilize leyendo
+  `~/Juegos/Steam/shader_cache_temp_dir_d3d12_64`. Falta el login y abrir un juego.
+- **Windows se achicó y Linux ganó 462 GiB.** El NTFS pasó de 1162 a **700 GiB**
+  (usa 498, le quedan 203 libres) con `ntfsresize` — **cero reubicaciones**, y la
+  partición se recreó con `sgdisk` conservando sector de inicio, tipo y PARTUUID.
+  El espacio liberado es la partición nueva `nvme0n1p6`, ext4, montada en
+  `~/Juegos` por UUID en `fstab` (454 GiB útiles). Verificado después: `ntfsfix`
+  da «alternate boot sector OK» y Windows monta con sus 498 GB intactos. Respaldo
+  de la tabla GPT en `~/.setup-ubuntu-backups/gpt-nvme0n1-20260831.bak`, y de
+  `/etc/fstab` en `/etc/fstab.bak-20260831`. **Windows va a correr `chkdsk` solo en
+  su próximo arranque: es lo normal después de un resize, no es que se haya roto.**
