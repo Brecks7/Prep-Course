@@ -76,16 +76,18 @@ export class DockVisibility {
         // que hay que revelar el dock. La barrera la resuelve mutter en el
         // compositor y sólo avisa cuando el puntero empuja de verdad el borde.
         this._createBarrier();
-        // Esconder: el dock es un actor del shell, así que sí recibe los eventos
-        // de cruce. Al salir arranca la gracia; al volver a entrar se cancela.
-        this._signals.connect(this._container, "leave-event", () => {
-            this._scheduleHide();
-            return Clutter.EVENT_PROPAGATE;
-        });
-        this._signals.connect(this._container, "enter-event", () => {
-            this._cancelHide();
-            return Clutter.EVENT_PROPAGATE;
-        });
+        // Esconder: NO por eventos de cruce, aunque parezca lo natural.
+        // `this._container` es la raíz del dock y se crea con `reactive: false`
+        // a propósito (dockManager.js: si fuera reactiva, la franja transparente
+        // de holgura se comería los clics de las ventanas de abajo), y Clutter
+        // no le manda `enter-event` ni `leave-event` a un actor no reactivo.
+        //
+        // Medido con el dispositivo virtual de Clutter, entrando y saliendo del
+        // dock dos veces: la raíz recibió 0 leave-events y el icon box —que sí
+        // es reactivo— recibió 4. Con los handlers colgados de la raíz nunca
+        // corría nadie, así que el dock se revelaba la primera vez y se quedaba
+        // a la vista para siempre. Lo esconde `_scheduleHide()`, que mira dónde
+        // está el puntero en vez de esperar un evento que no llega.
     }
     updateAnimationDuration(duration) {
         this._animationDuration = Math.max(0, Math.min(1000, duration));
@@ -210,10 +212,20 @@ export class DockVisibility {
         this._cancelHide();
         this._hideTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, HIDE_DELAY, () => {
             this._hideTimeoutId = null;
-            // Chequeo puntual, no un sondeo: si el puntero sigue sobre el borde
-            // el dock se queda, y el próximo leave-event vuelve a agendar.
-            if (!this._pointerNearEdge())
-                this._hide();
+            // Mientras el puntero siga sobre el dock —o haya una animación en
+            // curso, que haría que `_hide()` se fuera sin hacer nada— se vuelve
+            // a preguntar dentro de HIDE_DELAY. No es el sondeo perpetuo que
+            // había antes de la barrera: este timer sólo existe mientras el
+            // dock está a la vista y se apaga solo en cuanto el puntero se va.
+            //
+            // Acá antes se salía sin reagendar, confiando en que un leave-event
+            // de la raíz volviera a pedir el escondido. Ese evento no llega
+            // nunca (ver `start()`), y ese era el bug.
+            if (this._isShown && (this._pointerNearEdge() || this._isAnimating)) {
+                this._scheduleHide();
+                return GLib.SOURCE_REMOVE;
+            }
+            this._hide();
             return GLib.SOURCE_REMOVE;
         });
     }

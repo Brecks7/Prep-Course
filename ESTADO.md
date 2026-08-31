@@ -11,7 +11,7 @@ seguidas con el mismo bug.
 
 ---
 
-## Dónde retomar (última actualización: 30 de agosto de 2026, después del logout)
+## Dónde retomar (última actualización: 30 de agosto de 2026, verificación con unsafe mode)
 
 Árbol de git limpio. La rama `claude/linux-ubuntu-windows-migration-whc0li` está
 **varios commits adelante de `origin`**: falta pushear.
@@ -48,29 +48,75 @@ la verificación.
    El parche está en el `tiling.js` que corre, verificado: el guard de
    `get_compositor_private()` en `try` y el `if (index < 0) return` de `done()`.
 
-2. **Dock — la mitad verificada.** Con `auto-hide true` el dock se esconde: los
-   ocho iconos de la franja (0,1000)-(1920,1080) del monitor izquierdo ya no
-   están en la captura. **Falta la otra mitad — que vuelva al empujar el borde, y
-   que siga volviendo la décima vez.** Eso necesita mover el puntero, y en
-   Wayland no se mueve desde bash: hace falta el dispositivo virtual de Clutter
-   por `Eval`, o sea **unsafe mode**, que el logout apagó
-   (`Alt+F2` → `lg` → `global.context.unsafe_mode = true`).
+2. **Dock — verificado, 10 de 10, y apareció un bug nuevo ya arreglado.**
 
-   **`auto-hide` quedó en `true`** para poder retomar la prueba. Para devolverlo:
+   Con unsafe mode habilitado se pudo mover el puntero de verdad (dispositivo
+   virtual de Clutter por `Eval`; en Wayland no hay otra). Diez ciclos seguidos
+   de empujar el borde de abajo — `notify_absolute_motion` a (960,1070) y después
+   16 × `notify_relative_motion(0,+12)` cada 12 ms, o sea 192 px contra el umbral
+   de 100 px/1000 ms — y salir del borde antes de que venza la gracia de 400 ms:
+
+   ```
+   #1  antes=oculto  revelo=true  escondio=true  yFin=987
+   ...   (idéntico #2 a #9)
+   #10 antes=oculto  revelo=true  escondio=true  yFin=987
+   ```
+
+   **Los tres arreglos de la tanda anterior quedan confirmados**: la barrera
+   dispara (geometría del área de trabajo), el dock se revela y se vuelve a
+   esconder las diez veces (el flag `_isAnimating` ya no se traba), y **`y`
+   termina en 987 exacto en las diez** — la deriva de 20 px por ciclo se fue.
+
+   Confirmado también en píxeles, no sólo en el árbol de actores: capturas de la
+   franja (700,980)-(1220,1080) con el dock oculto y revelado difieren en 132.755
+   de 208.000 píxeles, y en la revelada se ven los ocho iconos.
+
+   **El bug nuevo: el dock se revelaba una vez y no se escondía nunca más.**
+   `dockVisibility.js` colgaba `enter-event` y `leave-event` de `this._container`,
+   que es la raíz del dock — y `dockManager.js` la crea con `reactive: false` a
+   propósito, para que la franja transparente de holgura no se coma los clics de
+   las ventanas de abajo. Clutter no manda cruces a un actor no reactivo, así que
+   esos dos handlers eran código muerto.
+
+   Medido, no leído: conectando un `leave-event` propio a los dos actores y
+   entrando/saliendo del dock dos veces con el dispositivo virtual, la raíz
+   recibió **0** eventos y el icon box (reactivo) **4**. Con el único
+   `_scheduleHide()` pendiente venciendo mientras el puntero seguía sobre el
+   borde, se salía sin reagendar y ahí quedaba el dock, visible para siempre.
+
+   El arreglo está en `_scheduleHide()`: mientras el puntero siga sobre el dock
+   —o haya una animación en curso— se vuelve a preguntar dentro de `HIDE_DELAY`,
+   y recién cuando se va corre `_hide()`. No es el sondeo perpetuo que había antes
+   de la barrera: el timer existe sólo mientras el dock está a la vista y se apaga
+   solo. Los dos handlers muertos se borraron.
+
+   Escrito en `setup/extensions/…/lib/dockVisibility.js` y copiado a `~/.local`.
+   **Todavía no corre: necesita cerrar sesión.** Hasta entonces el dock aparece
+   con el primer empujón y se queda — molesto, no roto.
+
+   **`auto-hide` queda en `true`**, que era la condición: la prueba no falló. Para
+   volver a dock fijo:
 
    ```bash
    D=~/.local/share/gnome-shell/extensions/macos-dock@son.local/schemas
    GSETTINGS_SCHEMA_DIR=$D gsettings set org.gnome.shell.extensions.macosdock auto-hide false
    ```
 
-   Revisado de paso el código que corre (`dockVisibility.js:118`): la barrera ya
-   usa `getWorkAreaForMonitor()` con el recorte de 1 px por punta. Los tres
-   arreglos están puestos; lo que falta es verlos funcionar.
+   Un detalle que costó media hora: `auto-hide` estaba en `false` al arrancar la
+   sesión aunque la sesión anterior lo había dejado en `true`. No se investigó si
+   lo pisa el reinicio o el propio arranque de la extensión.
 
-   Detalle para la próxima: los logs de la barrera son `console.debug`, y GLib
-   los descarta salvo que `G_MESSAGES_DEBUG` incluya el dominio `Gjs`. Con
-   unsafe mode se setea en caliente por `Eval`; si no, hay que dejarlo en
-   `~/.config/environment.d/` y volver a entrar.
+   Truco que sirve para cualquier prueba futura del dock: para forzar un ciclo
+   natural de esconder —con recreación de barrera incluida— alcanza con salir del
+   borde dentro de los 400 ms de gracia posteriores al disparo. Togglear
+   `auto-hide` también lo esconde, pero por `start()`, que es otro camino y no
+   prueba lo mismo.
+
+### Qué falta verificar después del próximo logout
+
+Volver a correr los diez ciclos con el `_scheduleHide()` nuevo, y esta vez
+**dejando el puntero quieto sobre el borde** entre ciclo y ciclo: eso es lo que
+el arreglo cubre y lo que la prueba de arriba no pudo ejercitar.
 
 **Pendientes reales**, ninguno urgente:
 
