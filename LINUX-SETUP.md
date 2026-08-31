@@ -184,7 +184,7 @@ Estas reemplazan a las clásicas y se aprenden en cinco minutos:
 | `fzf` | — | Buscador difuso; hace que `Ctrl+R` sea interactivo |
 | `bat` | `cat` | Ver archivos con colores y números de línea |
 | `eza` | `ls` | Listar archivos, más legible |
-| `zoxide` | `cd` | `cd` con memoria: `z prep` te lleva a `~/Prep-Course` |
+| `zoxide` | `cd` | `cd` con memoria: `z config` te lleva a `~/Documentos/Proyectos/Configurador` |
 | `btop` | Administrador de tareas | Ver CPU, RAM y procesos |
 
 ```bash

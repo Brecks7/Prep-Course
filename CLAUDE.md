@@ -1,18 +1,86 @@
-# Contexto del proyecto
+# Configurador
 
-Este repositorio es el **Prep Course de Henry**: el curso preparatorio de
-Desarrollo Web Full Stack. Contiene material de lectura (`README.md` por módulo)
-y ejercicios con tests (`homework/`), sobre JavaScript, HTML y CSS.
+Este repo es **el kit que configura mi Ubuntu**: los scripts de `setup/`, las dos
+extensiones propias de GNOME (`macos-dock` y `mactahoe-tweaks`), los parches a
+extensiones de terceros y el registro de cómo quedó armado el escritorio.
+
+Nació como fork del Prep Course de Henry y le quedó el material del curso adentro
+—sigue vivo, en la sección de abajo—, pero el trabajo de acá es el escritorio y
+los arreglos del sistema.
+
+**Si la tarea es del escritorio, leé `ESTADO.md`**: dice en qué anda cada cosa hoy.
+El relato largo de cada sesión —síntomas, callejones sin salida, evidencia— está en
+`ESTADO-historial.md`, y **no hace falta leerlo** salvo que algo se rompa y haga
+falta el porqué.
 
 ## Sobre mí
 
-Soy estudiante y estoy aprendiendo. Cuando me ayudes con un ejercicio:
+Vengo de Windows y estoy aprendiendo Linux: **avisame si algo es específico de
+Linux**. Respondeme en español.
 
-- **Explicá el porqué**, no me des solo la solución. Si me pasás el código
-  resuelto sin más, no aprendo nada y el Henry Challenge lo rindo yo, no vos.
+## Mi máquina
+
+- **Ubuntu 26.04 LTS**, GNOME 50, kernel 7.0, sesión Wayland.
+- **AMD Radeon RX 6900 XT** (navi21/gfx1030, PCI `0x73bf`), radeonsi/ACO con
+  aceleración por hardware funcionando. Mesa del sistema: 26.0.8.
+- 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
+- Dos monitores: DP-1 1920×1080 @360 Hz en x=0 (ahí viven barra y dock), DP-3
+  2560×1440 @200 Hz en x=1920. La pantalla completa mide 4480×1440.
+- Editor: VS Code. Steam instalado como **snap** — ojo, trae su propio Mesa, más
+  viejo que el del sistema (ver `ESTADO.md`, «Abierto»).
+
+## No trabajes a ciegas
+
+Tres diagnósticos de este repo salieron mal por afirmar sin medir: dos por leer CSS
+en vez de píxeles, y uno por dar por buena la GPU que decía este archivo (era una
+5700 XT en el papel y una 6900 XT en el zócalo). Hay herramientas para no repetirlo,
+y conviene usarlas **antes** de afirmar por qué algo se ve o falla como falla:
+
+```bash
+bash setup/gshell.sh check                 # ¿unsafe mode prendido?
+bash setup/gshell.sh find macos-dock-root  # un actor del shell, en vivo
+bash setup/gshell.sh push bottom           # empujar un borde (mueve el puntero)
+bash setup/shot.sh --crop 700,980,520,100  # píxeles de verdad
+bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless
+journalctl -b -1 -p err                    # qué pasó en el arranque anterior
+```
+
+`gshell.sh --help` los explica todos. Las trampas que cuestan una sesión si no se
+saben están en `ESTADO.md`, sección «Cómo mirar el escritorio».
+
+## El kit de setup (`setup/`)
+
+Se escribió y verificó en **Ubuntu 24.04**, y esta máquina es 26.04 — se adaptó
+para no depender de nombres de paquete fijos, pero **nada se probó sobre una
+26.04 real**. Por eso, siempre en este orden:
+
+```bash
+bash setup/doctor.sh                       # diagnóstico, solo lee
+bash setup/install.sh --dry-run --all      # ver qué haría, sin tocar nada
+bash setup/install.sh --yes <módulos>      # recién ahí — el --yes no es opcional
+bash setup/undo.sh                         # revertir si algo salió mal
+```
+
+`install.sh` **se cuelga para siempre** si se lo corre desde una herramienta sin TTY
+y sin `--yes`. Los módulos que piden sudo (`--perf`, `--base`, `--gpu`, `--desnap`,
+`--dev`) necesitan un askpass gráfico: nunca la contraseña por el chat.
+
+Detalles y decisiones: `setup/README.md`. Atajos y trampas al venir de Windows:
+`LINUX-SETUP.md`.
+
+---
+
+# El Prep Course de Henry
+
+El mismo repo tiene el material del curso preparatorio de Desarrollo Web Full Stack
+de Henry: lecturas (`README.md` por módulo) y ejercicios con tests (`homework/`),
+sobre JavaScript, HTML y CSS.
+
+## Cuando me ayudes con un ejercicio
+
+- **Explicá el porqué**, no me des solo la solución. Si me pasás el código resuelto
+  sin más, no aprendo nada y el Henry Challenge lo rindo yo, no vos.
 - Si me equivoco, señalá dónde está el error y por qué falla, antes de corregirlo.
-- Respondeme en español.
-- Vengo de Windows, avisame si algo es específico de Linux.
 
 ## Correr los tests del curso
 
@@ -35,54 +103,3 @@ superior**, al revés de lo que parece: `eleventy-plugin-toc` → `cheerio@1.2.0
 Las carpetas numeradas (`00-PrimerosPasos/`, `01a-Git/`, `02-JS-I/`, ...) son
 material del curso de Henry. Los archivos dentro de `homework/` sí son míos para
 resolver.
-
----
-
-# El escritorio
-
-Además del curso, este repo tiene el kit que configura mi Ubuntu y las dos
-extensiones propias de GNOME. **Si la tarea es del escritorio, leé `ESTADO.md`**
-(el estado de hoy, ~175 líneas). El relato largo de cada sesión está en
-`ESTADO-historial.md` y sólo se lee si hace falta el porqué de algo.
-
-## Mi máquina
-
-- **Ubuntu 26.04 LTS**, GNOME 50, kernel 7.0, sesión Wayland.
-- **AMD Radeon RX 5700 XT**, aceleración por hardware funcionando (radeonsi/ACO).
-- 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
-- Dos monitores: DP-1 1920×1080 @360 Hz en x=0 (ahí viven barra y dock), DP-3
-  2560×1440 @200 Hz en x=1920. La pantalla completa mide 4480×1440.
-- Editor: VS Code.
-
-## No trabajes a ciegas
-
-Dos diagnósticos de este repo salieron mal por leer CSS en vez de píxeles. Hay
-herramientas para no repetirlo, y conviene usarlas **antes** de afirmar por qué
-algo se ve como se ve:
-
-```bash
-bash setup/gshell.sh check                 # ¿unsafe mode prendido?
-bash setup/gshell.sh find macos-dock-root  # un actor del shell, en vivo
-bash setup/gshell.sh push bottom           # empujar un borde (mueve el puntero)
-bash setup/shot.sh --crop 700,980,520,100  # píxeles de verdad
-bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless
-```
-
-`gshell.sh --help` los explica todos. Las trampas que cuestan una sesión si no se
-saben están en `ESTADO.md`, sección «Cómo mirar el escritorio».
-
-## El kit de setup (`setup/`)
-
-Se escribió y verificó en **Ubuntu 24.04**, y esta máquina es 26.04 — se adaptó
-para no depender de nombres de paquete fijos, pero **nada se probó sobre una
-26.04 real**. Por eso, siempre en este orden:
-
-```bash
-bash setup/doctor.sh                       # diagnóstico, solo lee
-bash setup/install.sh --dry-run --all      # ver qué haría, sin tocar nada
-bash setup/install.sh <módulos>            # recién ahí
-bash setup/undo.sh                         # revertir si algo salió mal
-```
-
-Detalles y decisiones: `setup/README.md`. Atajos y trampas al venir de Windows:
-`LINUX-SETUP.md`.

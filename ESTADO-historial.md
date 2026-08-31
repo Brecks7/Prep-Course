@@ -1,4 +1,4 @@
-# Historial del escritorio — sesiones del 26 al 30 de agosto de 2026
+# Historial del escritorio — sesiones del 26 al 31 de agosto de 2026
 
 Esto es el relato completo de cada sesión: síntomas, diagnósticos, callejones sin
 salida y evidencia. **No se lee al arrancar.** `ESTADO.md` dice en qué anda cada
@@ -8,6 +8,131 @@ cuando una decisión parece arbitraria y hay que saber contra qué se peleó.
 Se movió acá el 30 de agosto de 2026: `ESTADO.md` había llegado a 776 líneas y se
 leía entero en cada sesión, que es exactamente lo que el skill `estado-de-proyecto`
 dice que no hay que hacer (*«sobrescritura, no bitácora»*).
+
+---
+
+## Sesión del 31 de agosto de 2026 (noche) — el cuelgue con CS2, diagnosticado
+
+La sesión anterior murió acá: se abrió CS2 y el escritorio se fue a **negro
+estático**. Nada se pudo escribir en el momento. Lo que sigue es la reconstrucción
+desde el journal del arranque `-1`, ya con la sesión nueva levantada.
+
+### Qué pasó de verdad — no era el compositor
+
+```
+18:43:01 amdgpu 0000:03:00.0: [gfxhub] page fault (src_id:0 ring:24 vmid:6 pasid:127)
+                              Process cs2 pid 14096 thread VKRenderThread pid 14139
+                              in page starting at address 0x00008000fbc08000 from client 0x1b (UTCL2)
+                              Faulty UTCL2 client ID: SQC (data) (0xa)
+                              PERMISSION_FAULTS: 0x3    MORE_FAULTS: 0x1
+18:43:04 amdgpu: ring gfx_0.0.0 timeout, signaled seq=246917, emitted seq=246919
+18:43:04 amdgpu: Starting gfx_0.0.0 ring reset  →  Ring gfx_0.0.0 reset failed
+18:43:05 gnome-shell[3088]: Connection to xwayland lost
+18:43:05 amdgpu: GPU reset(1) succeeded!
+18:43:05 amdgpu: [drm] device wedged, but recovered through reset
+18:44:07 radv/amdgpu: The CS has been cancelled because the context is lost.
+```
+
+Se leyó mal dos veces antes de mirar el journal, y las dos lecturas quedaron
+escritas en el plan viejo. Las correcciones:
+
+- **El reset no falló.** Lo que falló fue el reset *por ring* (`Ring gfx_0.0.0
+  reset failed`); el kernel escaló a un reset de **dispositivo completo** que sí
+  funcionó (`GPU reset(1) succeeded!`, `recovered through reset`). El kernel
+  nunca murió.
+- **Lo que murió fue Xwayland** (`Connection to xwayland lost`). Eso es el
+  pantallazo negro: no un cuelgue del sistema, sino el servidor X caído bajo una
+  sesión Wayland que siguió viva.
+- **La GPU no es una RX 5700 XT.** `glxinfo` da `AMD Radeon RX 6900 XT
+  (radeonsi, navi21, ACO)`, PCI `0x73bf`. El `CLAUDE.md` lo tenía mal desde el
+  principio y ese dato ya había orientado mal un plan entero. Corregido.
+
+`SQC (data)` + `PERMISSION_FAULTS` significa que un **shader** leyó memoria fuera
+de lo suyo. No es hardware fallando ni el compositor: es el código que RADV
+compiló para ese shader.
+
+### Por qué el snap de Steam es el sospechoso
+
+Steam está instalado como snap (`/snap/bin/steam`, rev 231) y **no usa el Mesa del
+sistema**: lo recibe por content-snap desde `gaming-graphics-core24`. Verificado
+desde adentro del confinamiento con `snap run --shell steam -c 'glxinfo -B'`:
+
+| Stack | Mesa (al momento del crash) |
+|---|---|
+| Sistema (GNOME, escritorio) | **26.0.8** |
+| Snap de Steam (`gaming-graphics-core24`, canal `kisak-fresh/stable`) | **25.2.2** |
+
+El canal que traía el snap, `kisak-fresh/stable`, estaba **congelado en 25.2.2
+desde el 18 de diciembre de 2025** — ocho meses sin moverse. O sea que el RADV que
+compiló el shader culpable venía una serie mayor entera atrás del que mueve el
+escritorio sin problemas.
+
+Es un modo de falla ya documentado para este snap: hay un caso análogo en el foro
+de Ubuntu (RX 9070 XT en 25.04) donde el Mesa viejo del snap cuelga la GPU y lo que
+lo resuelve es usar Steam por `.deb` o Flatpak, que sí toman el Mesa del sistema.
+
+### La pieza que cerró el caso: el shader cache
+
+`steamapps/shadercache/730/fozpipelinesv6/steam_pipeline_cache.foz` pesaba
+**5,3 GB** y tenía fecha **18:39** del 31/08. El crash fue a las **18:43**: cuatro
+minutos después. Es el pipeline cache de Fossilize que Steam descarga y precompila
+con el RADV local antes de que el juego arranque.
+
+Y en todo el journal guardado (desde el 25 de agosto, 11 arranques) **`cs2` aparece
+una sola vez**: la del crash. El único proceso que causó page faults de amdgpu en
+esa semana, y en su única corrida. No es esporádico: es 1 de 1, estrenando 5,3 GB
+de shaders recién compilados por un driver viejo.
+
+### Qué se hizo
+
+1. `snap refresh gaming-graphics-core24 --channel=kisak-turtle/candidate`
+   → de **25.2.2** a **25.3.6** (abril de 2026). Se eligió `kisak-turtle/candidate`
+   porque es a la vez la revisión más nueva de todos los canales del snap y la de
+   rama más conservadora. Verificado desde adentro: `Mesa 25.3.6 - kisak-mesa PPA`.
+   Ningún canal del snap llega al 26.0.8 del sistema.
+2. `rm -rf steamapps/shadercache/730` → 5,6 GB. El cache entero lo había compilado
+   el driver viejo; se regenera solo en el primer arranque (esa partida va a tardar
+   más en cargar, es esperable).
+
+**Falta la prueba de fuego: abrir CS2.** No se hizo en esta sesión a propósito — si
+vuelve a colgar se lleva puesto Xwayland y con él la conversación, que es
+exactamente la regla que le dio origen a `ESTADO.md`. Se escribió esto primero.
+
+### Si vuelve a pasar
+
+Que no cuelgue a ciegas otra vez. En las propiedades de CS2 en Steam, opciones de
+lanzamiento:
+
+```
+RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%
+```
+
+Con eso RADV vuelca el shader culpable en `~/radv_dumps` en vez de tumbar el
+servidor gráfico. Cuesta rendimiento (sincroniza en cada draw call): es para
+diagnosticar, no para jugar. Y en otra terminal, `journalctl -kf | grep amdgpu`.
+
+Escalada, si el Mesa nuevo no alcanzó:
+
+1. `RADV_DEBUG=llvm %command%` — cambia el compilador de shaders de ACO a LLVM. Si
+   con esto no cuelga, es un bug de ACO en Navi 21 y hay que reportarlo.
+2. **Steam por `.deb` o Flatpak** en lugar del snap: es el fix que reportaron
+   efectivo en el caso análogo, porque toma el Mesa 26.0.8 del sistema. Ojo: CS2
+   ocupa **67 GB**, así que la biblioteca se migra moviendo `steamapps/`, no
+   re-descargando.
+3. `amdgpu.noretry=0` en el cmdline. Hoy no hay ningún parámetro de amdgpu ahí, y
+   tocarlo pide reiniciar. Último recurso.
+
+### De paso, limpieza de disco — 5,9 GB
+
+- Los tres clones de temas: `~/Descargas/MacTahoe-gtk-theme` (30 MB),
+  `~/Descargas/WhiteSur-icon-theme` (118 MB) y `~/WhiteSur-icon-theme` (**148 MB**).
+  El último pesaba el doble de lo esperado porque tenía un `MacTahoe-gtk-theme/`
+  clonado **adentro** — un `git clone` corrido desde el directorio equivocado.
+  Los tres limpios y con remote público, recuperables con un `git clone`.
+  Verificado antes de borrar: `grep "Descargas" setup/*.sh` sin hits (`undo.sh` no
+  los referencia) y ningún symlink de `~/.themes` o `~/.local/share/icons`
+  apuntaba ahí — el tema aplicado vive instalado, independiente del clon.
+- El shader cache de CS2: 5,6 GB.
 
 ---
 

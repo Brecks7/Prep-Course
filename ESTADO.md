@@ -14,21 +14,31 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 
 ## Dónde retomar
 
-Rama `claude/linux-ubuntu-windows-migration-whc0li`, **21 commits adelante de
-`origin`**: falta pushear. Está trabado por afuera del
-repo: esta máquina no tiene con qué autenticarse contra GitHub — no hay `gh`, no
-hay `credential.helper` configurado y no hay claves SSH, así que `git push` muere
-con `could not read Username for 'https://github.com'`. Se destraba con
-`sudo apt install gh && gh auth login` (interactivo, lo corre la persona), o
-generando una clave SSH y cambiando el remoto a `git@github.com:`.
+**La prueba pendiente es abrir CS2.** El cuelgue del 31/08 —pantalla negra al
+lanzarlo— quedó diagnosticado y mitigado, pero **sin verificar**: se escribió esto
+primero a propósito, porque si vuelve a colgar se lleva puesto Xwayland y con él la
+conversación. Al abrirlo, tener `journalctl -kf | grep amdgpu` en otra terminal. La
+primera partida va a tardar más en cargar: el shader cache se está regenerando.
+
+Si vuelve a colgar, la escalada está en `ESTADO-historial.md` (sesión del 31/08):
+`RADV_DEBUG=llvm`, después Steam por `.deb`/Flatpak. Y para capturar en vez de
+colgar: `RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
+
+**Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **22 commits
+adelante de `origin`**. Está trabado por afuera del repo: esta máquina no tiene con
+qué autenticarse contra GitHub — no hay `gh`, no hay `credential.helper` y no hay
+claves SSH, así que `git push` muere con `could not read Username for
+'https://github.com'`. Se destraba con `sudo apt install gh && gh auth login`
+(interactivo, **lo corre la persona**), o con una clave SSH y el remoto en
+`git@github.com:`.
 
 **Falta un login limpio para el dock.** Los dos arreglos del 31/08 —umbral de
 revelado y ciclado del clic— están verificados, pero la sesión viva quedó con una
 barrera de presión huérfana (GNOME marcó `macos-dock` INACTIVE al detectar los
-archivos cambiados y no corrió su `disable()`), así que ahí ya no se puede medir
-el revelado: los choques contra la barrera nueva no llegan. La prueba en el
-sandbox sí es limpia. Al volver a entrar, repetir el gesto suave contra el borde
-de abajo y los tres clics sobre el icono de la terminal.
+archivos cambiados y no corrió su `disable()`), así que ahí ya no se puede medir el
+revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox sí
+es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
+tres clics sobre el icono de la terminal.
 
 Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
 (ver «Abierto»).
@@ -41,6 +51,19 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Qué funciona, verificado
 
+- **El repo se mudó a `~/Documentos/Proyectos/Configurador`** (31/08). Estaba en
+  `~/Imágenes/Prep-Course`, que contradecía la regla de arranque del `CLAUDE.md`
+  global. Verificado desde la ruta nueva: `doctor.sh` con 0 críticos y 0 errores de
+  gnome-shell, y `npm test` con 129 tests en 7 suites. Nada del kit tenía la ruta
+  vieja hardcodeada. Las cuatro memorias del proyecto se consolidaron en la key
+  `-home-son-Documentos-Proyectos-Configurador` — venían partidas en **dos** keys, y
+  las dos de la key `-home-son-Prep-Course` (`sudo-requiere-ventana-grafica`,
+  `setup-install-necesita-yes`) estaban huérfanas: no cargaban desde ninguna ruta.
+  Comprobado ya con una sesión abierta desde la ruta nueva: las cuatro cargan al
+  arrancar, y `doctor.sh` da 0 críticos y 0 errores de gnome-shell. En las dos keys
+  viejas quedaron **copias idénticas** de esas memorias (se copiaron, no se
+  movieron); son inertes porque esas rutas ya no existen, pero si alguna vez se
+  edita una memoria, la que vale es la de la key nueva.
 - **PaperWM ya no tira la sesión al abrir Discord.** Era un SIGSEGV del shell al
   redimensionar una `MetaWindow` que mutter ya estaba desmanejando. Dos guards en
   `tiling.js`, en `setup/patches/paperwm-timeout-ventana-muerta.patch`. Cinco
@@ -94,6 +117,19 @@ bash setup/gshell.sh find macos-dock-root
   entradas para 3 ventanas, estable en seis ciclos.
 
 ## Abierto
+
+- **El snap de Steam corre un Mesa más viejo que el sistema, y eso colgó la GPU.**
+  No usa el Mesa del sistema: lo recibe por content-snap desde
+  `gaming-graphics-core24`. Al momento del cuelgue del 31/08 el snap traía **25.2.2**
+  (canal `kisak-fresh/stable`, congelado desde diciembre de 2025) contra **26.0.8**
+  del sistema, y un shader compilado por ese RADV viejo hizo page fault
+  (`UTCL2 client ID: SQC (data)`, `PERMISSION_FAULTS`) → ring timeout → reset de
+  dispositivo → Xwayland caído. Mitigado pasando el canal a
+  `kisak-turtle/candidate` (**25.3.6**) y borrando el shader cache de CS2, pero
+  **ningún canal del snap llega al 26.0.8 del sistema**: la brecha se reabre sola con
+  cada actualización de Ubuntu. La salida de fondo es Steam por `.deb` o Flatpak, que
+  toman el Mesa del sistema; cuesta migrar 67 GB de biblioteca. Relato y evidencia en
+  `ESTADO-historial.md`.
 
 - **Ruido en el journal**, sin síntoma visible, sin mirar: PaperWM
   (`Meta.BackgroundActor ... already disposed`, en `utils.js:567` / `grab.js:441`)
