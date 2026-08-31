@@ -21,20 +21,28 @@ Linux**. Respondeme en español.
 ## Mi máquina
 
 - **Ubuntu 26.04 LTS**, GNOME 50, kernel 7.0, sesión Wayland.
-- **AMD Radeon RX 6900 XT** (navi21/gfx1030, PCI `0x73bf`), radeonsi/ACO con
-  aceleración por hardware funcionando. Mesa del sistema: 26.0.8.
-- 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
+- **AMD Radeon RX 6900 XT** de ASUS (navi21/gfx1030, PCI `0x73bf`, subsistema
+  `1043:04fa`), radeonsi/ACO con aceleración por hardware. Mesa del sistema: 26.0.8.
+- **AMD Ryzen 7 9800X3D**, 32 GB de RAM. Es 8C/**16T**, pero **hoy corre con 8
+  hilos**: el SMT está apagado en la BIOS (ver `ESTADO.md`, «Abierto»). La máquina
+  es fuerte: si algo va lento, es configuración.
 - Dos monitores: DP-1 1920×1080 @360 Hz en x=0 (ahí viven barra y dock), DP-3
   2560×1440 @200 Hz en x=1920. La pantalla completa mide 4480×1440.
-- Editor: VS Code. Steam instalado como **snap** — ojo, trae su propio Mesa, más
-  viejo que el del sistema (ver `ESTADO.md`, «Abierto»).
+- **Disco NVMe de 2 TB, en dual boot**: Windows en `nvme0n1p3` (700 GiB NTFS, sin
+  montar), Linux en `nvme0n1p5` (`/`, 733 GiB) y **`nvme0n1p6` montada en
+  `~/Juegos`** (454 GiB), donde vive Steam entero.
+- Editor: VS Code. **Steam es el `.deb` nativo** instalado en `~/Juegos/Steam` —
+  usa el Mesa del sistema. El snap sigue instalado como respaldo hasta que un juego
+  abra; después se borra.
 
 ## No trabajes a ciegas
 
-Tres diagnósticos de este repo salieron mal por afirmar sin medir: dos por leer CSS
-en vez de píxeles, y uno por dar por buena la GPU que decía este archivo (era una
-5700 XT en el papel y una 6900 XT en el zócalo). Hay herramientas para no repetirlo,
-y conviene usarlas **antes** de afirmar por qué algo se ve o falla como falla:
+Cuatro diagnósticos de este repo salieron mal por afirmar sin medir: dos por leer
+CSS en vez de píxeles, y dos por dar por buenos los datos de hardware de este
+archivo — decía una 5700 XT y en el zócalo hay una 6900 XT; decía «8 hilos» y son
+8 de los 16 que tiene el 9800X3D. **Este archivo también se mide antes de creerle.**
+Hay herramientas para no repetirlo, y conviene usarlas **antes** de afirmar por qué
+algo se ve o falla como falla:
 
 ```bash
 bash setup/gshell.sh check                 # ¿unsafe mode prendido?

@@ -14,15 +14,20 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 
 ## Dónde retomar
 
-**La prueba pendiente es abrir CS2.** El cuelgue del 31/08 —pantalla negra al
-lanzarlo— quedó diagnosticado y mitigado, pero **sin verificar**: se escribió esto
-primero a propósito, porque si vuelve a colgar se lleva puesto Xwayland y con él la
-conversación. Al abrirlo, tener `journalctl -kf | grep amdgpu` en otra terminal. La
-primera partida va a tardar más en cargar: el shader cache se está regenerando.
+**La prueba pendiente es iniciar sesión en Steam y abrir CS2.** Steam nativo está
+corriendo desde `~/Juegos/Steam` y quedó en la pantalla de login — eso lo hace la
+persona. Con la sesión iniciada, abrir CS2 con `journalctl -kf | grep amdgpu` en
+otra terminal. La primera partida tarda más: el shader cache se regenera.
 
-Si vuelve a colgar, la escalada está en `ESTADO-historial.md` (sesión del 31/08):
-`RADV_DEBUG=llvm`, después Steam por `.deb`/Flatpak. Y para capturar en vez de
-colgar: `RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
+La causa del cuelgue del 31/08 ya no está: era el Mesa 25.2.2 del snap contra el
+26.0.8 del sistema, y ahora Steam es el `.deb` nativo, que usa el del sistema. Si
+aun así cuelga, la escalada está en `ESTADO-historial.md` (sesión del 31/08):
+`RADV_DEBUG=llvm`. Y para capturar en vez de colgar:
+`RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
+
+**No borrar el snap de Steam hasta que un juego abra.** Los 83 GB del snap siguen
+en `~/snap/steam/` y son la única copia de respaldo de la biblioteca. Cuando CS2
+arranque desde el nativo: `sudo snap remove steam` libera esos 83 GB del disco raíz.
 
 **Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **23 commits
 adelante de `origin`**. Está trabado por afuera del repo: esta máquina no tiene con
@@ -56,8 +61,9 @@ característica `ffe1`, color `7e 00 05 03 RR GG BB 00 ef` y on/off
 esos paquetes contra una tira**, no darlos por buenos.
 
 Hoy no hay nada instalado: `openrgb` no está (candidato de apt `0.9+git20251009`,
-y hay Flatpak `org.openrgb.OpenRGB`), `bleak` tampoco, y `i2c-dev` **no está
-cargado** (sí `i2c_piix4`, que es el bus). Forma pensada: CLI `rgbctl` en venv
+y hay Flatpak `org.openrgb.OpenRGB`), `bleak` tampoco, y `i2c-dev` **no hace falta cargarlo**: en el kernel 7.0 de Ubuntu 26.04 viene
+compilado adentro, no como módulo — por eso no aparece en `lsmod` pero sí
+existen los 21 nodos `/dev/i2c-*`. El bus `i2c_piix4` también está. Forma pensada: CLI `rgbctl` en venv
 propio bajo `setup/bin/rgb/` (nunca `sudo pip`), empaquetado como
 `setup/modules/70-rgb.sh` con su entrada en `install.sh`, `undo.sh` y `doctor.sh`,
 y un `QuickMenuToggle` en el hub que lo llame con `Gio.Subprocess` **asíncrono**
@@ -77,6 +83,41 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Qué funciona, verificado
 
+- **Steam salió del snap y tiene carpeta propia.** El snap corría un Mesa 25.2.2
+  (content-snap `gaming-graphics-core24`) contra el 26.0.8 del sistema, y un shader
+  compilado por ese RADV viejo colgó la GPU el 31/08 (`UTCL2 client ID: SQC (data)`
+  → ring timeout → reset → Xwayland caído). Ningún canal del snap llega al Mesa del
+  sistema, así que la brecha se reabría con cada actualización de Ubuntu. Ahora es
+  `steam-installer` de multiverse (el `.deb` de Valve, i386 habilitado), instalado
+  entero en **`~/Juegos/Steam`** con `~/.steam/{steam,root}` y `~/.local/share/Steam`
+  apuntando ahí. Los 83 GB se copiaron con `rsync` (salida 0), no se re-descargaron,
+  y las rutas de `libraryfolders.vdf` quedaron reescritas. Verificado: el cliente
+  arranca desde la ruta nueva, con `fsync: up and running` y Fossilize leyendo
+  `~/Juegos/Steam/shader_cache_temp_dir_d3d12_64`. Falta el login y abrir un juego.
+- **Windows se achicó y Linux ganó 462 GiB.** El NTFS pasó de 1162 a **700 GiB**
+  (usa 498, le quedan 203 libres) con `ntfsresize` — **cero reubicaciones**, y la
+  partición se recreó con `sgdisk` conservando sector de inicio, tipo y PARTUUID.
+  El espacio liberado es la partición nueva `nvme0n1p6`, ext4, montada en
+  `~/Juegos` por UUID en `fstab` (454 GiB útiles). Verificado después: `ntfsfix`
+  da «alternate boot sector OK» y Windows monta con sus 498 GB intactos. Respaldo
+  de la tabla GPT en `~/.setup-ubuntu-backups/gpt-nvme0n1-20260831.bak`, y de
+  `/etc/fstab` en `/etc/fstab.bak-20260831`. **Windows va a correr `chkdsk` solo en
+  su próximo arranque: es lo normal después de un resize, no es que se haya roto.**
+- **El firewall está activo.** `ufw` estaba **instalado pero inactivo**, con un
+  `next-server` (Next.js) escuchando en `*:3000`, o sea alcanzable desde toda la
+  red local. Ahora: `deny incoming` / `allow outgoing`, con `1714:1764` tcp+udp
+  abierto para GSConnect, que es lo único que necesita entrante.
+- **La home dejó de estar derramada.** Se fueron: el volcado de Xwayland del
+  cuelgue (`core.3902`, 146 MB), el prefijo `~/.wine` (1,2 GB — sólo tenía un
+  Lightshot abandonado del 26/08, reemplazado por Flameshot) con su
+  `setup-lightshot.exe`, las capturas de `shot.sh` (289 MB), la caché de apt
+  (549 MB), nueve revisiones viejas de snaps (`refresh.retain=2`) y un
+  `Flameshot.desktop.bak` duplicado en autostart. El backup `~/.claude.bak-*` se
+  comprimió a 7,6 MB en `~/.setup-ubuntu-backups/`. La home quedó con sus carpetas
+  estándar más `Juegos` y `snap`, nada suelto.
+- **El indexador ya no muerde los juegos.** `tracker3` indexaba `$HOME` entero, o
+  sea que iba a recorrer los 85 GB de Steam. Excluidos `~/Juegos`, `~/snap`,
+  `~/.cache`, `~/.nvm` y `~/.npm`.
 - **El repo se mudó a `~/Documentos/Proyectos/Configurador`** (31/08). Estaba en
   `~/Imágenes/Prep-Course`, que contradecía la regla de arranque del `CLAUDE.md`
   global. Verificado desde la ruta nueva: `doctor.sh` con 0 críticos y 0 errores de
@@ -144,19 +185,24 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Abierto
 
-- **El snap de Steam corre un Mesa más viejo que el sistema, y eso colgó la GPU.**
-  No usa el Mesa del sistema: lo recibe por content-snap desde
-  `gaming-graphics-core24`. Al momento del cuelgue del 31/08 el snap traía **25.2.2**
-  (canal `kisak-fresh/stable`, congelado desde diciembre de 2025) contra **26.0.8**
-  del sistema, y un shader compilado por ese RADV viejo hizo page fault
-  (`UTCL2 client ID: SQC (data)`, `PERMISSION_FAULTS`) → ring timeout → reset de
-  dispositivo → Xwayland caído. Mitigado pasando el canal a
-  `kisak-turtle/candidate` (**25.3.6**) y borrando el shader cache de CS2, pero
-  **ningún canal del snap llega al 26.0.8 del sistema**: la brecha se reabre sola con
-  cada actualización de Ubuntu. La salida de fondo es Steam por `.deb` o Flatpak, que
-  toman el Mesa del sistema; cuesta migrar 67 GB de biblioteca. Relato y evidencia en
-  `ESTADO-historial.md`.
-
+- **El SMT del 9800X3D está apagado en la BIOS: 8 hilos en vez de 16.**
+  `/sys/devices/system/cpu/smt/control` dice `notsupported` y `lscpu -e` da un core
+  por CPU — el firmware directamente esconde los hermanos. No fue decisión del
+  usuario; **quiere los 16**, y es un cambio de BIOS que hace la persona
+  (MSI X670E: Del → Advanced → CPU Features → **SMT Control = Auto**). Al volver,
+  verificar con `nproc` (debe dar 16) y `cat /sys/devices/system/cpu/smt/active`
+  (debe dar 1).
+- **Quedan 327 GB de biblioteca de Steam del lado de Windows**, en
+  `Program Files (x86)/Steam` (más 39 GB de Riot). No conviene usarlos desde NTFS:
+  Proton y los permisos de ntfs-3g se pelean. La migración barata es copiar las
+  carpetas de `steamapps/common` a `~/Juegos/Steam/steamapps/common` y darle
+  «verificar integridad» en Steam — descarga sólo lo que falta en vez de los 327 GB
+  enteros. Hay 370 GB libres en `~/Juegos`, así que entra.
+- **Windows sigue en 700 GiB y se puede achicar más** cuando termine la migración
+  (mínimo real hoy: ~497 GiB). Falta definir qué programas necesita Nano.
+- **Cinco actualizaciones quedan retenidas** (`nautilus`, `software-properties`):
+  son actualizaciones por fases de Ubuntu, se destraban solas. Las otras 10, entre
+  ellas 5 de seguridad, ya están aplicadas.
 - **Ruido en el journal**, sin síntoma visible, sin mirar: PaperWM
   (`Meta.BackgroundActor ... already disposed`, en `utils.js:567` / `grab.js:441`)
   y `macos-dock` (`lib/iconManager.js:474` ← `:374` ← `:263`, `dockManager.js:390-394`,
