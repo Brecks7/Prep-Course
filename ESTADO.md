@@ -11,34 +11,58 @@ seguidas con el mismo bug.
 
 ---
 
-## Dónde retomar (última actualización: 30 de agosto de 2026, noche)
+## Dónde retomar (última actualización: 30 de agosto de 2026, después del logout)
 
 Árbol de git limpio. La rama `claude/linux-ubuntu-windows-migration-whc0li` está
 **varios commits adelante de `origin`**: falta pushear.
 
-**Todo lo de esta tanda es código de extensión o de PaperWM, o sea que no se ve
-hasta el próximo inicio de sesión.** Desde GNOME 50 no hay forma de recargar una
-extensión en vivo (`ReloadExtension` responde `is deprecated and does not work`),
-y `Alt+F2 r` no existe en Wayland. Lo que corre ahora es el código viejo.
+El logout ya se hizo: **el código de esta tanda está corriendo**. Lo que sigue es
+la verificación.
 
-**Qué hay que verificar al volver del logout** — el detalle está en «Qué
-verificar después de cerrar sesión», más abajo:
+### Verificación después del logout
 
-1. Abrir Discord unas cuantas veces: el shell no se tiene que caer.
-2. Apagar el toggle **Dock** y empujar el borde de abajo: el dock tiene que
-   volver, y tiene que seguir volviendo la décima vez.
-3. Mirar la barra de arriba a la derecha: un solo icono, dos interruptores.
+3. **Barra de arriba a la derecha — verificado, y con una decisión.** Queda un
+   solo botón, medido con `shot.sh`: la píldora en (1875..1913, 0..40) del
+   monitor izquierdo, contra los 132 px de cinco iconos que había antes.
+
+   **El glifo del hub no se dibuja: adentro del botón hay 2 colores, el fondo de
+   la píldora (64,61,58) y el del panel (52,48,45), más antialiasing del borde —
+   cero píxeles de icono.** El SVG no tiene la culpa: renderizado con librsvg da
+   1400 píxeles opacos y se ven los dos interruptores. La causa quedó sin
+   diagnosticar (apuntaba al recoloreo symbolic de `St`), y **no hay que
+   diagnosticarla**:
+
+   > **Decisión del usuario, 30 de agosto: el botón se queda invisible.** Le
+   > gusta así — la zona sigue siendo clickeable y abre el hub, que es todo lo
+   > que se le pedía. Esto **no es un bug pendiente**. Si una sesión futura ve el
+   > botón vacío, que no lo "arregle": es lo buscado.
+
+1. **Discord / crash de PaperWM** — pendiente de probar.
+2. **Dock que esconde y no vuelve** — pendiente. Ojo: `auto-hide` está hoy en
+   `false` (dock fijo), así que la barrera de presión ni se crea y no hay nada
+   que loguear. Para probarlo hay que prenderlo:
+
+   ```bash
+   D=~/.local/share/gnome-shell/extensions/macos-dock@son.local/schemas
+   GSETTINGS_SCHEMA_DIR=$D gsettings set org.gnome.shell.extensions.macosdock auto-hide true
+   ```
+
+   Y empujar el borde de abajo. En Wayland el puntero no se mueve desde bash:
+   hace falta el dispositivo virtual de Clutter por `Eval`, o sea **unsafe mode**
+   (`Alt+F2` → `lg` → `global.context.unsafe_mode = true`), que el logout apagó.
 
 **Pendientes reales**, ninguno urgente:
 
 - El ruido de PaperWM en el journal (`Meta.BackgroundActor ... already disposed`,
   traza en `utils.js:567` / `grab.js:441`). No rompe nada visible.
+- Ruido nuevo de `macos-dock` en el journal de este arranque: trazas repetidas en
+  `lib/iconManager.js:474` ← `:374` ← `:263`, y en `dockManager.js:390-394` y
+  `_applyDockPosition()` (`:497`). Sin síntoma visible todavía; sin mirar.
 - Averiguar por qué el `showHandler` parcheado de PaperWM no corre para las
   ventanas que dejaban fantasma. El guard propio ya cubre el síntoma, así que es
   curiosidad técnica, no un bug abierto.
 - Si alguna Flatpak no abre después de un login:
   `systemctl --user restart xdg-document-portal` antes que cualquier otra cosa.
-
 ---
 
 ## Sesión del 30 de agosto de 2026 (noche)
