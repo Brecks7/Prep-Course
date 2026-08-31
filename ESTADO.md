@@ -37,19 +37,40 @@ la verificación.
    > que se le pedía. Esto **no es un bug pendiente**. Si una sesión futura ve el
    > botón vacío, que no lo "arregle": es lo buscado.
 
-1. **Discord / crash de PaperWM** — pendiente de probar.
-2. **Dock que esconde y no vuelve** — pendiente. Ojo: `auto-hide` está hoy en
-   `false` (dock fijo), así que la barrera de presión ni se crea y no hay nada
-   que loguear. Para probarlo hay que prenderlo:
+1. **Discord / crash de PaperWM — verificado, no se cae.** Cinco rondas de
+   `timeout 14 discord`, con el shell vigilado por PID entre una y otra: siempre
+   el mismo (30608), `etimes` creciendo sin resetearse, cero `segfault` en el
+   journal. Y la prueba fue la buena, no una en la que Discord no llegó a abrir:
+   el journal muestra `window.created win1 "discord"` con `SPLASH_SCREEN_QUOTE`
+   y después `window.created win2 "Discord"` — el splash que se cierra a los
+   ~990 ms, que es exactamente lo que disparaba el SIGSEGV.
+
+   El parche está en el `tiling.js` que corre, verificado: el guard de
+   `get_compositor_private()` en `try` y el `if (index < 0) return` de `done()`.
+
+2. **Dock — la mitad verificada.** Con `auto-hide true` el dock se esconde: los
+   ocho iconos de la franja (0,1000)-(1920,1080) del monitor izquierdo ya no
+   están en la captura. **Falta la otra mitad — que vuelva al empujar el borde, y
+   que siga volviendo la décima vez.** Eso necesita mover el puntero, y en
+   Wayland no se mueve desde bash: hace falta el dispositivo virtual de Clutter
+   por `Eval`, o sea **unsafe mode**, que el logout apagó
+   (`Alt+F2` → `lg` → `global.context.unsafe_mode = true`).
+
+   **`auto-hide` quedó en `true`** para poder retomar la prueba. Para devolverlo:
 
    ```bash
    D=~/.local/share/gnome-shell/extensions/macos-dock@son.local/schemas
-   GSETTINGS_SCHEMA_DIR=$D gsettings set org.gnome.shell.extensions.macosdock auto-hide true
+   GSETTINGS_SCHEMA_DIR=$D gsettings set org.gnome.shell.extensions.macosdock auto-hide false
    ```
 
-   Y empujar el borde de abajo. En Wayland el puntero no se mueve desde bash:
-   hace falta el dispositivo virtual de Clutter por `Eval`, o sea **unsafe mode**
-   (`Alt+F2` → `lg` → `global.context.unsafe_mode = true`), que el logout apagó.
+   Revisado de paso el código que corre (`dockVisibility.js:118`): la barrera ya
+   usa `getWorkAreaForMonitor()` con el recorte de 1 px por punta. Los tres
+   arreglos están puestos; lo que falta es verlos funcionar.
+
+   Detalle para la próxima: los logs de la barrera son `console.debug`, y GLib
+   los descarta salvo que `G_MESSAGES_DEBUG` incluya el dominio `Gjs`. Con
+   unsafe mode se setea en caliente por `Eval`; si no, hay que dejarlo en
+   `~/.config/environment.d/` y volver a entrar.
 
 **Pendientes reales**, ninguno urgente:
 
