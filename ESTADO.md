@@ -14,8 +14,13 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 
 ## Dónde retomar
 
-Rama `claude/linux-ubuntu-windows-migration-whc0li`, **varios commits adelante de
-`origin`**: falta pushear. Es lo único pendiente.
+Rama `claude/linux-ubuntu-windows-migration-whc0li`, **14 commits adelante de
+`origin`**: falta pushear, y es lo único pendiente. Está trabado por afuera del
+repo: esta máquina no tiene con qué autenticarse contra GitHub — no hay `gh`, no
+hay `credential.helper` configurado y no hay claves SSH, así que `git push` muere
+con `could not read Username for 'https://github.com'`. Se destraba con
+`sudo apt install gh && gh auth login` (interactivo, lo corre la persona), o
+generando una clave SSH y cambiando el remoto a `git@github.com:`.
 
 El dock quedó verificado entero, sin necesidad de cerrar sesión: ver
 `gshell.sh patch` más abajo, que es la novedad que más cambia el día a día.
