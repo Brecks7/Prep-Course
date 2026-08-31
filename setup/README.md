@@ -623,6 +623,28 @@ Una extensión rota no avisa: `gnome-extensions info` sigue diciendo `ACTIVE`
 aunque `enable()` haya tirado a mitad de camino. Lo único que lo cuenta es el
 journal.
 
+```bash
+bash setup/gshell.sh check                 # ¿unsafe mode prendido?
+bash setup/gshell.sh find macos-dock-root  # un actor: posición, tamaño, visible
+bash setup/gshell.sh tree 2                # árbol de actores visibles
+bash setup/gshell.sh pointer 960 400       # mover el puntero
+bash setup/gshell.sh push bottom           # empujar un borde hasta la barrera
+```
+
+Le habla al shell **que está corriendo**, sin cerrar sesión. Todo pasa por
+`org.gnome.Shell.Eval`, que sólo responde con unsafe mode habilitado
+(`Alt+F2` → `lg` → `global.context.unsafe_mode = true`, y se apaga con el logout).
+
+Existe porque cada sesión que necesitó mirar el escritorio volvió a tropezar con
+las mismas tres cosas: el escapado de gdbus (el JS viaja en base64, si no cualquier
+comilla lo rompe con `unknown keyword`), que **`imports.ui.main` no funciona**
+porque la UI del shell es ESM y hay que llegar a los objetos caminando
+`global.stage`, y que en Wayland el puntero **sólo** se mueve con el dispositivo
+virtual de Clutter — `xdotool`, `wtype` y `ydotool` no sirven.
+
+Ojo con la diferencia: el árbol de actores dice qué **cree** el shell, no qué se
+dibujó. Para píxeles, `shot.sh`.
+
 ## Decisiones que quizás te sorprendan
 
 **No instala el driver propietario de AMD.** En Ubuntu 24.04 el stack open

@@ -14,74 +14,68 @@ Soy estudiante y estoy aprendiendo. Cuando me ayudes con un ejercicio:
 - Respondeme en español.
 - Vengo de Windows, avisame si algo es específico de Linux.
 
-## Mi máquina
-
-- **Ubuntu 26.04 LTS** (Resolute Raccoon), GNOME 50, kernel 7.0, sesión Wayland.
-- **AMD Radeon RX 5700 XT** — aceleración por hardware funcionando (radeonsi/ACO).
-- 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
-- Editor: VS Code.
-
-Estado corto (el detalle y la bitácora completa están en `ESTADO.md`):
-
-- **Node por nvm**, 24.20.0 por defecto. Nunca apt, nunca `sudo npm install -g`.
-- Instalados: `ripgrep fzf bat btop eza zoxide`, VS Code (repo de Microsoft),
-  Chrome (`.deb` oficial), y por Flatpak Krita, LibreSprite y Pixelorama.
-- **Vulkan y VA-API funcionan** (RADV NAVI10; H264/HEVC por hardware con
-  `radeonsi`), `swappiness` en 10.
-- Escritorio: tema `MacTahoe-Dark`, dock propio (`macos-dock@son.local`),
-  `mactahoe-tweaks@son.local`, PaperWM parcheado, Blur my Shell, efecto genie al
-  minimizar.
-
-## No trabajes a ciegas con el escritorio
-
-Dos diagnósticos anteriores de este repo estaban equivocados por leer CSS en vez
-de píxeles. Hay tres scripts para evitarlo, y conviene usarlos **antes** de
-afirmar por qué algo se ve como se ve:
-
-```bash
-bash setup/shot.sh --probe 300,0,60      # RGB de una columna de la pantalla
-bash setup/shot.sh --wait 6 --crop 560,960,800,120
-bash setup/shell-sandbox.sh mactahoe-tweaks@son.local   # GNOME Shell headless
-bash setup/watch-shell.sh                # journal del shell, filtrado
-```
-
-En Wayland `grim` no sirve (es de wlroots) y `org.gnome.Shell.Screenshot` por
-D-Bus devuelve `AccessDenied`; la vía que funciona es el portal de escritorio,
-que es lo que usa `shot.sh`. Y desde GNOME 50 no se puede recargar una extensión
-en vivo: `ReloadExtension` responde `is deprecated and does not work`, así que o
-se prueba en el sandbox o hay que cerrar sesión.
-
-Ojo con el kit desde una sesión sin terminal: `--perf`, `--base`, `--gpu`,
-`--desnap` y `--dev` piden `sudo` y abren una ventana gráfica de contraseña que
-hay que responder a mano. `--theme` sobre un tema que ya está puesto no pide nada.
-
 ## Correr los tests del curso
 
 ```bash
+nvm use           # el repo tiene .nvmrc en 24
 npm install
 npm test          # jest sobre los homework
+npm start         # Eleventy en http://localhost:8080
 ```
 
-Las dependencias de este repo son de 2021 (Eleventy 0.12, Jest 27), pero
-**necesitan Node 20 o superior** — al revés de lo que parece. Verificado en
-agosto 2026: en Node 16 el build muere con `ReadableStream is not defined` y en
-Node 18 con `File is not defined`; en 22 y 24 anda todo. El motivo es
-`eleventy-plugin-toc` → `cheerio@1.2.0` → `undici@7`, que exige 20+.
+Las dependencias son de 2021 (Eleventy 0.12, Jest 27) pero **necesitan Node 20 o
+superior**, al revés de lo que parece: `eleventy-plugin-toc` → `cheerio@1.2.0` →
+`undici@7` exige 20+. Verificado en agosto de 2026: en Node 16 el build muere con
+`ReadableStream is not defined` y en 18 con `File is not defined`.
 
-El repo tiene un `.nvmrc` en `24`, así que alcanza con `nvm use` y listo.
+**Node siempre por nvm.** Nunca apt, nunca `sudo npm install -g`.
+
+## Qué no tocar
+
+Las carpetas numeradas (`00-PrimerosPasos/`, `01a-Git/`, `02-JS-I/`, ...) son
+material del curso de Henry. Los archivos dentro de `homework/` sí son míos para
+resolver.
+
+---
+
+# El escritorio
+
+Además del curso, este repo tiene el kit que configura mi Ubuntu y las dos
+extensiones propias de GNOME. **Si la tarea es del escritorio, leé `ESTADO.md`**
+(132 líneas, el estado de hoy). El relato largo de cada sesión está en
+`ESTADO-historial.md` y sólo se lee si hace falta el porqué de algo.
+
+## Mi máquina
+
+- **Ubuntu 26.04 LTS**, GNOME 50, kernel 7.0, sesión Wayland.
+- **AMD Radeon RX 5700 XT**, aceleración por hardware funcionando (radeonsi/ACO).
+- 29 GB de RAM, 8 hilos. La máquina es fuerte: si algo va lento, es configuración.
+- Dos monitores: DP-1 1920×1080 @360 Hz en x=0 (ahí viven barra y dock), DP-3
+  2560×1440 @200 Hz en x=1920. La pantalla completa mide 4480×1440.
+- Editor: VS Code.
+
+## No trabajes a ciegas
+
+Dos diagnósticos de este repo salieron mal por leer CSS en vez de píxeles. Hay
+herramientas para no repetirlo, y conviene usarlas **antes** de afirmar por qué
+algo se ve como se ve:
 
 ```bash
-npm start         # levanta Eleventy en http://localhost:8080
+bash setup/gshell.sh check                 # ¿unsafe mode prendido?
+bash setup/gshell.sh find macos-dock-root  # un actor del shell, en vivo
+bash setup/gshell.sh push bottom           # empujar un borde (mueve el puntero)
+bash setup/shot.sh --crop 700,980,520,100  # píxeles de verdad
+bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless
 ```
+
+`gshell.sh --help` los explica todos. Las trampas que cuestan una sesión si no se
+saben están en `ESTADO.md`, sección «Cómo mirar el escritorio».
 
 ## El kit de setup (`setup/`)
 
-Scripts para configurar Ubuntu: look de macOS, rendimiento, drivers, entorno de
-desarrollo. Se escribieron y verificaron en **Ubuntu 24.04**, y esta máquina es
-26.04 — el kit se adaptó para no depender de nombres de paquete fijos, pero
-**nada de esto se probó sobre una 26.04 real**.
-
-Por eso, siempre en este orden:
+Se escribió y verificó en **Ubuntu 24.04**, y esta máquina es 26.04 — se adaptó
+para no depender de nombres de paquete fijos, pero **nada se probó sobre una
+26.04 real**. Por eso, siempre en este orden:
 
 ```bash
 bash setup/doctor.sh                       # diagnóstico, solo lee
@@ -90,11 +84,5 @@ bash setup/install.sh <módulos>            # recién ahí
 bash setup/undo.sh                         # revertir si algo salió mal
 ```
 
-Detalles y decisiones tomadas: `setup/README.md`.
-Atajos y trampas al venir de Windows: `LINUX-SETUP.md`.
-
-## Qué no tocar
-
-Las carpetas numeradas (`00-PrimerosPasos/`, `01a-Git/`, `02-JS-I/`, ...) son
-material del curso de Henry. Los archivos dentro de `homework/` sí son míos para
-resolver.
+Detalles y decisiones: `setup/README.md`. Atajos y trampas al venir de Windows:
+`LINUX-SETUP.md`.
