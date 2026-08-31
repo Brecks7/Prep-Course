@@ -24,7 +24,7 @@ Si vuelve a colgar, la escalada está en `ESTADO-historial.md` (sesión del 31/0
 `RADV_DEBUG=llvm`, después Steam por `.deb`/Flatpak. Y para capturar en vez de
 colgar: `RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
 
-**Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **22 commits
+**Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **23 commits
 adelante de `origin`**. Está trabado por afuera del repo: esta máquina no tiene con
 qué autenticarse contra GitHub — no hay `gh`, no hay `credential.helper` y no hay
 claves SSH, así que `git push` muere con `could not read Username for
