@@ -629,6 +629,7 @@ bash setup/gshell.sh find macos-dock-root  # un actor: posición, tamaño, visib
 bash setup/gshell.sh tree 2                # árbol de actores visibles
 bash setup/gshell.sh pointer 960 400       # mover el puntero
 bash setup/gshell.sh push bottom           # empujar un borde hasta la barrera
+bash setup/gshell.sh patch <js> <Clase>    # recargar código sin cerrar sesión
 ```
 
 Le habla al shell **que está corriendo**, sin cerrar sesión. Todo pasa por
@@ -641,6 +642,28 @@ comilla lo rompe con `unknown keyword`), que **`imports.ui.main` no funciona**
 porque la UI del shell es ESM y hay que llegar a los objetos caminando
 `global.stage`, y que en Wayland el puntero **sólo** se mueve con el dispositivo
 virtual de Clutter — `xdotool`, `wtype` y `ydotool` no sirven.
+
+`patch` es el que más cambia el día a día. Desde GNOME 50, `ReloadExtension`
+contesta `is deprecated and does not work`, así que cada cambio en una extensión
+costaba cerrar sesión — el gasto más grande de este repo. Resulta que adentro de
+`Eval` el `import()` dinámico funciona y comparte el registro de módulos del
+shell: `import('file://<ruta>')` a secas devuelve el módulo **ya cargado**, o sea
+la clase viva, y la misma ruta con otra query (`?v=<ts>`) se relee del disco.
+Copiando los métodos del prototipo nuevo al viejo, las instancias que ya están
+corriendo pasan a ejecutar el código nuevo. Así se verificó el arreglo del
+autoocultado del dock sin reiniciar nada.
+
+Dos límites que conviene tener presentes. La ruta "viva" tiene que ser **la que
+cargó el shell** (la de `~/.local/share/gnome-shell/extensions/...`): con la copia
+del repo, el import sin query crea un módulo aparte y el parche no le llega a
+nadie — para eso está `--from`. Y sólo alcanza a métodos del prototipo: el
+`constructor` y `enable()` ya corrieron, así que campos y señales conectadas
+quedan como estaban. Para un cambio ahí, sigue siendo `shell-sandbox.sh` o logout.
+
+Y una trampa de las mediciones con el puntero virtual: **si alguien toca el mouse
+mientras corre la prueba, la prueba miente.** El puntero físico pisa al virtual y
+el código termina midiendo la mano. Conviene que el script compare dónde quedó el
+puntero contra dónde lo dejó y descarte esa medición en vez de contarla.
 
 Ojo con la diferencia: el árbol de actores dice qué **cree** el shell, no qué se
 dibujó. Para píxeles, `shot.sh`.

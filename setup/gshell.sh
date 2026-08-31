@@ -20,6 +20,8 @@
 #   bash setup/gshell.sh pointer 960 400           moverlo (dispositivo virtual)
 #   bash setup/gshell.sh push bottom               empujar un borde hasta que
 #                                                  dispare la barrera de presión
+#   bash setup/gshell.sh patch <archivo> <Clase>   recargar los métodos de una
+#                                                  clase sin cerrar sesión
 #   bash setup/gshell.sh debug                     ver los console.debug de Gjs
 #
 # Para ver **píxeles** no sirve esto, sirve `setup/shot.sh`: el árbol de actores
@@ -198,6 +200,110 @@ cmd_debug() {
     log_info "ahora sí aparecen; mirá con: bash setup/watch-shell.sh"
 }
 
+cmd_patch() {
+    # Recargar el código de una extensión sin cerrar sesión.
+    #
+    # GNOME 50 sacó `ReloadExtension`, así que tocar una extensión costaba un
+    # logout por iteración — el gasto más grande de este proyecto. La salida es
+    # que `import()` dinámico **sí** funciona adentro de Eval:
+    #
+    #   - `import('file://<ruta>')` a secas devuelve el módulo **ya cargado**
+    #     por el shell (el registro es el mismo), o sea la clase viva.
+    #   - la misma ruta con una query distinta (`?v=<ts>`) es otra clave en ese
+    #     registro, así que el archivo se lee de nuevo desde el disco.
+    #
+    # Copiando los métodos del segundo prototipo al primero, las instancias que
+    # ya existen pasan a correr el código nuevo en el acto.
+    #
+    # Lo que NO hace, y por eso no reemplaza al logout para la prueba final:
+    # el `constructor` ya corrió (los campos y las señales conectadas quedan
+    # como estaban) y sólo alcanza a métodos del prototipo, no a los campos de
+    # clase ni a lo que la extensión haya hecho en `enable()`.
+    #
+    #   bash setup/gshell.sh patch ~/.local/share/gnome-shell/extensions/foo/lib/bar.js Clase
+    #   bash setup/gshell.sh patch <ruta-viva> Clase --from <ruta-con-el-código-nuevo>
+    #   bash setup/gshell.sh patch <ruta-viva> Clase _scheduleHide _hide
+    local vivo="${1:-}" clase="${2:-}" desde="" metodos=()
+    shift 2 2>/dev/null
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --from) desde="$2"; shift 2 ;;
+            *) metodos+=("$1"); shift ;;
+        esac
+    done
+    if [[ -z "$vivo" || -z "$clase" ]]; then
+        log_err "uso: patch <archivo.js> <Clase> [--from <archivo.js>] [método...]"
+        return 2
+    fi
+    # La ruta viva tiene que ser **la que cargó el shell** (la de ~/.local): si
+    # se le pasa la copia del repo, el import sin query crea un módulo nuevo en
+    # vez de devolver el vivo, y el parche no le llega a nadie.
+    vivo="$(cd -- "$(dirname -- "$vivo")" && pwd)/$(basename -- "$vivo")"
+    [[ -f "$vivo" ]] || { log_err "no existe $vivo"; return 2; }
+    if [[ -n "$desde" ]]; then
+        desde="$(cd -- "$(dirname -- "$desde")" && pwd)/$(basename -- "$desde")"
+        [[ -f "$desde" ]] || { log_err "no existe $desde"; return 2; }
+    else
+        desde="$vivo"
+    fi
+
+    local lista="[]"
+    if [[ ${#metodos[@]} -gt 0 ]]; then
+        lista="$(printf '"%s",' "${metodos[@]}")"
+        lista="[${lista%,}]"
+    fi
+
+    ev "globalThis.__gp = {estado: 'cargando'};
+        Promise.all([
+            import('file://$vivo'),
+            import('file://$desde?v=' + Date.now()),
+        ]).then(([a, b]) => {
+            const P = a['$clase'] && a['$clase'].prototype;
+            const Q = b['$clase'] && b['$clase'].prototype;
+            if (!P || !Q) {
+                globalThis.__gp = {estado: 'error', msg: 'la clase $clase no está exportada'};
+                return;
+            }
+            const pedidos = $lista;
+            const todos = Object.getOwnPropertyNames(Q).filter(n => n !== 'constructor' &&
+                typeof Object.getOwnPropertyDescriptor(Q, n).value === 'function');
+            const nombres = pedidos.length ? pedidos : todos;
+            const cambiados = [], iguales = [], faltan = [];
+            for (const n of nombres) {
+                if (typeof Q[n] !== 'function') { faltan.push(n); continue; }
+                if (typeof P[n] === 'function' && P[n].toString() === Q[n].toString()) {
+                    iguales.push(n); continue;
+                }
+                P[n] = Q[n];
+                cambiados.push(n);
+            }
+            globalThis.__gp = {estado: 'listo', cambiados, iguales, faltan};
+        }).catch(e => { globalThis.__gp = {estado: 'error', msg: String(e.message || e)}; });
+        'lanzado'" >/dev/null || return $?
+
+    # `import()` es asíncrono: hay que esperar a que la promesa se asiente.
+    local r="" i
+    for i in $(seq 1 30); do
+        r="$(ev 'JSON.stringify(globalThis.__gp)' 2>/dev/null)"
+        [[ "$r" == *'"listo"'* || "$r" == *'"error"'* ]] && break
+        sleep 0.2
+    done
+
+    printf '%s' "$r" | python3 -c '
+import json, sys
+try:    d = json.loads(sys.stdin.read() or "{}")
+except Exception: d = {}
+e = d.get("estado")
+if e == "error":   print("  ✗ " + d.get("msg", "falló el import")); sys.exit(1)
+if e != "listo":   print("  ✗ el import no terminó a tiempo");      sys.exit(1)
+c, ig, f = d.get("cambiados", []), d.get("iguales", []), d.get("faltan", [])
+print("  ✓ recargados: " + (", ".join(c) if c else "(ninguno: el disco ya coincide)"))
+if ig: print("    sin cambios: " + str(len(ig)) + " método(s)")
+if f:  print("  ✗ no existen en el archivo nuevo: " + ", ".join(f))
+'
+}
+
+
 case "${1:-}" in
     check)   shift; cmd_check "$@" ;;
     eval)    shift; cmd_eval "$@" ;;
@@ -206,6 +312,7 @@ case "${1:-}" in
     pointer) shift; cmd_pointer "$@" ;;
     push)    shift; cmd_push "$@" ;;
     debug)   shift; cmd_debug "$@" ;;
-    -h|--help|"") sed -n '2,26p' "$0" | sed 's/^# \?//' ;;
-    *) log_err "subcomando desconocido: $1"; sed -n '13,23p' "$0" | sed 's/^# \?//'; exit 2 ;;
+    patch)   shift; cmd_patch "$@" ;;
+    -h|--help|"") sed -n '2,28p' "$0" | sed 's/^# \?//' ;;
+    *) log_err "subcomando desconocido: $1"; sed -n '13,25p' "$0" | sed 's/^# \?//'; exit 2 ;;
 esac

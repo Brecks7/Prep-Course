@@ -15,14 +15,10 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 ## Dónde retomar
 
 Rama `claude/linux-ubuntu-windows-migration-whc0li`, **varios commits adelante de
-`origin`**: falta pushear.
+`origin`**: falta pushear. Es lo único pendiente.
 
-Hay **un arreglo escrito que todavía no corre** (`dockVisibility.js`, ver abajo).
-Entra solo en el próximo inicio de sesión; no hay apuro.
-
-Después de ese logout, lo único que queda por verificar: los diez ciclos del dock
-**dejando el puntero quieto sobre el borde** entre ciclo y ciclo. Es el caso que
-el arreglo cubre y que la prueba anterior no pudo ejercitar.
+El dock quedó verificado entero, sin necesidad de cerrar sesión: ver
+`gshell.sh patch` más abajo, que es la novedad que más cambia el día a día.
 
 ```bash
 bash setup/gshell.sh check          # unsafe mode: Alt+F2 → lg → global.context.unsafe_mode = true
@@ -40,16 +36,31 @@ bash setup/gshell.sh find macos-dock-root
   Verificado el 30/08: cinco rondas de abrir y cerrar Discord, mismo PID del
   shell, cero segfaults, y el journal muestra el splash — o sea que la prueba
   ejercitó el caso real, no uno en el que Discord no llegó a abrir.
-- **El dock se revela al empujar el borde de abajo, y sigue haciéndolo.**
+- **El dock se revela al empujar el borde de abajo, y se esconde al irse.**
   Verificado el 30/08 con diez ciclos seguidos por el dispositivo virtual de
-  Clutter: revela y esconde las diez veces, y la Y de reposo termina en **987
-  exacto en las diez** — la deriva de 20 px por ciclo está muerta. Confirmado
-  también en píxeles (dock oculto vs. revelado: 132.755 de 208.000 píxeles
-  distintos, y los ocho iconos en la captura).
+  Clutter, y repetido con el arreglo de `_scheduleHide()` ya cargado, esta vez
+  **dejando el puntero quieto 1,2 s sobre el borde** antes de alejarlo: las diez
+  veces revela, se queda mientras el puntero está encima y esconde en cuanto se
+  va, con la Y de reposo en **987 exacto en las diez** — la deriva de 20 px por
+  ciclo está muerta. Los contadores muestran el mecanismo: 4 reagendas de
+  `_scheduleHide` por ciclo (la inicial más 1200/400) y un `_hide` por ciclo.
+  Confirmado en píxeles: los ocho iconos aparecen en la captura del recorte.
+  Cuidado al repetirlo: **si se toca el mouse durante la tanda, la prueba miente**
+  — el puntero físico pisa al virtual y `_pointerNearEdge()` mide la mano, no el
+  script. La versión buena del test descarta el ciclo si el puntero se corrió más
+  de 40 px de donde lo dejó.
   Las tres causas que había: barrera mal puesta (ahora `getWorkAreaForMonitor()`
   con 1 px de recorte por punta, porque el segundo monitor arranca en x=1920),
   `_isAnimating` colgado en `true` (Clutter no llama `onComplete` al cancelar una
   transición), y las animaciones leyendo `container.y` en vez de la Y de reposo.
+- **El dock se esconde de nuevo.** `dockVisibility.js` colgaba
+  `enter-event`/`leave-event` de la raíz del dock, que es `reactive: false` a
+  propósito — Clutter no manda cruces a un actor no reactivo, así que esos
+  handlers eran código muerto y el dock se revelaba una vez y se quedaba visible
+  para siempre. Medido: 0 eventos en la raíz contra 4 en el icon box, y el
+  `_scheduleHide()` viejo salía sin reagendar. Ahora se reagenda mientras el
+  puntero siga encima. Verificado en caliente con `gshell.sh patch`; el archivo
+  en `~/.local` ya está, así que el próximo login arranca con esto puesto.
 - **No hay fantasma al minimizar.** El guard vive en código propio
   (`mactahoe-tweaks/ghostGuard.js`), no en el parche de PaperWM: ese parche está
   bien puesto pero **no llega a correr** para esas ventanas. Regla única: una
@@ -62,13 +73,6 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Abierto
 
-- **El arreglo del dock todavía no corre.** `dockVisibility.js` colgaba
-  `enter-event`/`leave-event` de la raíz del dock, que es `reactive: false` a
-  propósito — Clutter no manda cruces a un actor no reactivo, así que esos
-  handlers eran código muerto y el dock se revelaba una vez y se quedaba visible
-  para siempre. Medido: 0 eventos en la raíz contra 4 en el icon box. Ahora
-  `_scheduleHide()` se reagenda mientras el puntero siga encima y esconde en
-  cuanto se va. Escrito y copiado a `~/.local`; **entra al próximo login.**
 - **Ruido en el journal**, sin síntoma visible, sin mirar: PaperWM
   (`Meta.BackgroundActor ... already disposed`, en `utils.js:567` / `grab.js:441`)
   y `macos-dock` (`lib/iconManager.js:474` ← `:374` ← `:263`, `dockManager.js:390-394`,
@@ -106,6 +110,7 @@ bash setup/gshell.sh find macos-dock-root  # un actor: posición, tamaño, visib
 bash setup/gshell.sh tree 2                # árbol de actores visibles
 bash setup/gshell.sh pointer 960 400       # mover el puntero (Wayland)
 bash setup/gshell.sh push bottom           # empujar un borde hasta la barrera
+bash setup/gshell.sh patch <js> <Clase>     # recargar código sin cerrar sesión
 bash setup/shot.sh --probe 300,0,60        # RGB de una columna: los píxeles
 bash setup/shot.sh --crop 700,980,520,100  # un recorte de la pantalla
 bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless, sin arriesgar
@@ -121,8 +126,17 @@ Lo que hay que saber antes de usarlos:
 - **El árbol de actores dice qué cree el shell, no qué se dibujó.** Para píxeles,
   `shot.sh`. En Wayland `grim` no sirve y `org.gnome.Shell.Screenshot` por D-Bus
   da `AccessDenied`; la vía que funciona es el portal, que es lo que usa `shot.sh`.
-- **Desde GNOME 50 no se recarga una extensión en vivo** (`ReloadExtension`
-  responde `is deprecated and does not work`): o sandbox, o cerrar sesión.
+- **Una extensión sí se recarga en vivo, aunque `ReloadExtension` esté muerto**
+  (responde `is deprecated and does not work`). La vía es `gshell.sh patch`:
+  adentro de `Eval`, `import('file://<ruta>')` devuelve el módulo **ya cargado**
+  por el shell, y la misma ruta con otra query (`?v=<ts>`) lo relee del disco;
+  copiando los métodos del segundo prototipo al primero, las instancias vivas
+  pasan a correr el código nuevo. Esto sacó el logout por iteración, que era el
+  gasto más grande del proyecto.
+  Lo que **no** cubre: el `constructor` ya corrió y `enable()` también, así que
+  los campos y las señales conectadas quedan como estaban — alcanza sólo a
+  métodos del prototipo. Para un cambio en `start()` o en el constructor, sigue
+  siendo sandbox o logout.
 - Los `console.debug` de las extensiones los descarta GLib salvo que
   `G_MESSAGES_DEBUG` incluya el dominio `Gjs` — `gshell.sh debug` lo prende en
   caliente.
