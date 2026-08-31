@@ -23,6 +23,8 @@ export class DockManager {
     _magnification = null;
     _settings = null;
     _lastFocusedApp = null;
+    // {id, lista, i} del ciclado de ventanas del clic en el dock.
+    _cycle = null;
     _recentlyLaunched = new Set();
     _debounceSourceId = null;
     _originalDashVisible;
@@ -166,6 +168,9 @@ export class DockManager {
                 this._iconManager.setIndicatorStyle(settings.get_int("running-indicator-style"));
             }
         });
+        this._signals.connect(settings, "changed::reveal-threshold", () => {
+            this._visibility?.updateRevealThreshold(settings.get_int("reveal-threshold"));
+        });
         this._signals.connect(settings, "changed::show-threshold", () => {
             if (this._visibility && settings.get_boolean("auto-hide")) {
                 this._startAutoHide();
@@ -233,7 +238,7 @@ export class DockManager {
         // Clean up any existing auto-hide before creating new.
         this._stopAutoHide();
         this._intellihide = new Intellihide();
-        this._visibility = new DockVisibility(this._container, this._intellihide, this._dockHeight, DockManager.MARGIN_BOTTOM, this._settings.get_int("animation-duration"), this._settings.get_int("show-threshold"), this._dockPosition);
+        this._visibility = new DockVisibility(this._container, this._intellihide, this._dockHeight, DockManager.MARGIN_BOTTOM, this._settings.get_int("animation-duration"), this._settings.get_int("show-threshold"), this._dockPosition, this._settings.get_int("reveal-threshold"));
         // Must set dock rect AFTER creating intellihide so it can detect overlap.
         this._updatePosition();
         this._visibility.start();
@@ -254,38 +259,83 @@ export class DockManager {
         }
     }
     _onAppClicked(app) {
-        const firstWindow = this._findFirstWindow(app);
-        if (firstWindow) {
-            if (firstWindow.has_focus() && !firstWindow.minimized) {
-                // Window is focused and visible — minimize it.
-                firstWindow.minimize();
-            }
-            else if (firstWindow.minimized) {
-                // Window is minimized — restore and activate.
-                firstWindow.unminimize();
-                firstWindow.activate(global.get_current_time());
-            }
-            else {
-                // Window exists but not focused — activate it.
-                firstWindow.activate(global.get_current_time());
-            }
+        const ventanas = this._windowsForApp(app);
+        if (ventanas.length === 0) {
+            app.open_new_window(-1);
+            return;
+        }
+        // Una sola ventana: el clic la esconde y la trae, como siempre.
+        if (ventanas.length === 1) {
+            this._cycle = null;
+            this._activateWindow(ventanas[0], true);
+            return;
+        }
+        // Varias: se cicla. El orden se congela al empezar el ciclo — si se
+        // recalculara en cada clic, `activate()` acaba de mover esa ventana al
+        // frente y el índice apuntaría siempre a las mismas dos.
+        const id = app.get_id();
+        const enfocada = global.display.focus_window;
+        const seguimos = this._cycle?.id === id &&
+            this._cycle.lista.length === ventanas.length &&
+            this._cycle.lista.every(w => ventanas.includes(w)) &&
+            this._cycle.lista.includes(enfocada);
+        if (seguimos) {
+            this._cycle.i = (this._cycle.i + 1) % this._cycle.lista.length;
         }
         else {
-            app.open_new_window(-1);
+            // Ciclo nuevo: se entra por la primera del orden, que es la de tu
+            // monitor y la más reciente. Si ya estabas parado en ella, se pasa
+            // a la siguiente para que el clic no parezca no hacer nada.
+            this._cycle = { id, lista: ventanas, i: ventanas[0] === enfocada ? 1 : 0 };
+        }
+        this._activateWindow(this._cycle.lista[this._cycle.i], false);
+    }
+    /** Trae una ventana al frente; con `alternar`, un segundo clic la minimiza. */
+    _activateWindow(win, alternar) {
+        if (win.minimized) {
+            win.unminimize();
+            win.activate(global.get_current_time());
+        }
+        else if (alternar && win.has_focus()) {
+            win.minimize();
+        }
+        else {
+            win.activate(global.get_current_time());
         }
     }
-    _findFirstWindow(app) {
+    /**
+     * Las ventanas de una app, en el orden en que conviene visitarlas: primero
+     * las del monitor donde está el puntero, y dentro de cada grupo la más
+     * usada primero.
+     *
+     * Lo que había acá devolvía la primera de `global.get_window_actors()`, o
+     * sea la de más abajo en el apilado. Con dos terminales, una por monitor,
+     * eso significa que clickeás el icono en la pantalla de la izquierda y la
+     * que aparece es la de la derecha: no hay ninguna relación entre el orden
+     * de apilado y dónde estás mirando.
+     */
+    _windowsForApp(app) {
         const tracker = Shell.WindowTracker.get_default();
-        const windows = global.get_window_actors();
-        for (const wa of windows) {
-            const metaWin = wa.get_meta_window();
-            if (!metaWin)
-                continue;
-            if (tracker.get_window_app(metaWin) === app) {
-                return metaWin;
-            }
+        const monitor = this._monitorAtPointer();
+        return global.get_window_actors()
+            .map(wa => wa.get_meta_window())
+            .filter(w => w && !w.is_skip_taskbar() && tracker.get_window_app(w) === app)
+            .sort((a, b) => {
+                const ma = a.get_monitor() === monitor ? 0 : 1;
+                const mb = b.get_monitor() === monitor ? 0 : 1;
+                if (ma !== mb)
+                    return ma - mb;
+                return b.get_user_time() - a.get_user_time();
+            });
+    }
+    /** Índice del monitor bajo el puntero, con el primario como respaldo. */
+    _monitorAtPointer() {
+        const [x, y] = global.get_pointer();
+        for (const m of Main.layoutManager.monitors) {
+            if (x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height)
+                return m.index;
         }
-        return null;
+        return Main.layoutManager.primaryIndex;
     }
     _onFocusAppChanged() {
         if (!this._settings)

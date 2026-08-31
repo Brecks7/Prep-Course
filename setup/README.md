@@ -323,6 +323,39 @@ Qué arregla el fork:
   llamaba `disconnect()` sobre objetos ya liberados y GJS escupía
   `Object St.BoxLayout ... has been already disposed` con stack trace en el
   journal.
+- **El revelado ya no pide un empujón de 100 px.** El auto-ocultado se revelaba
+  la primera vez y después no, por más veces que se insistiera. La presión que
+  cuenta mutter no es cuánto recorrés hasta el borde: es cuánto **te habrías
+  pasado de largo**, la suma de los `dy` de los eventos que chocan la barrera.
+  Medido con el dispositivo virtual de Clutter, el primer gesto —un barrido
+  desde el medio de la pantalla, 192 px en 200 ms— produce 15 choques y dispara;
+  el segundo, con el puntero ya cerca del borde, 90 px en 250 ms, produce uno o
+  dos y acumula ~18 px. Con el umbral de ubuntu-dock en 100 px ese segundo gesto
+  **no dispara nunca**. Barriendo valores con el mismo gesto: 100, 40 y 20 no
+  revelan; 10, 5 y 1 sí. Y el falso positivo que el umbral alto venía a evitar no
+  aparece — rozar el borde de lado a lado, 600 px en horizontal pegado a la
+  última fila, no dispara con **ningún** umbral, porque moverse *a lo largo* de
+  la barrera no suma presión. El default queda en 5 px, y en el schema como
+  `reveal-threshold` (1–200) por si con ventanas maximizadas molesta.
+- **El clic en el icono cicla entre las ventanas, y empieza por la de tu
+  monitor.** `_findFirstWindow()` devolvía la primera de
+  `global.get_window_actors()`, o sea la de más abajo en el **orden de
+  apilado** — que no tiene ninguna relación con dónde estás mirando. Con dos
+  terminales, una por monitor, clickeás el icono en la pantalla de la izquierda
+  y la que aparece es la de la derecha. Ahora `_windowsForApp()` ordena por
+  monitor bajo el puntero primero y por `get_user_time()` dentro de cada grupo,
+  y `_onAppClicked()` lleva un ciclo por app: el segundo clic pasa a la ventana
+  siguiente en vez de repetir la misma. El orden se **congela** al empezar el
+  ciclo; si se recalculara en cada clic, `activate()` acaba de mover esa ventana
+  al frente y el índice apuntaría siempre a las mismas dos. Con una sola ventana
+  el clic sigue minimizando y restaurando, como antes.
+
+  Lo que **no** se reprodujo es el cursor saltando de monitor: medido
+  `global.get_pointer()` antes y después en siete clics y dos `activate()`
+  directos, el puntero no se movió ni una vez. Quien mueve cosas entre monitores
+  es PaperWM, que arrastra la ventana a su monitor al restaurarla —
+  `move_to_monitor()` no le gana. Lo que el dock sí hacía mal, y ya no, es
+  elegir la ventana equivocada.
 - **El dock ahora escucha los cambios de favoritos.** `iconManager.js` sólo
   conectaba `installed-changed` del `Shell.AppSystem`, nunca
   `changed::favorite-apps` de `org.gnome.shell`. O sea que la lista de

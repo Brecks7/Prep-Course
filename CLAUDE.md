@@ -42,7 +42,7 @@ resolver.
 
 Además del curso, este repo tiene el kit que configura mi Ubuntu y las dos
 extensiones propias de GNOME. **Si la tarea es del escritorio, leé `ESTADO.md`**
-(132 líneas, el estado de hoy). El relato largo de cada sesión está en
+(el estado de hoy, ~175 líneas). El relato largo de cada sesión está en
 `ESTADO-historial.md` y sólo se lee si hace falta el porqué de algo.
 
 ## Mi máquina

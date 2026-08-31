@@ -1,4 +1,4 @@
-# Estado del escritorio — 30 de agosto de 2026
+# Estado del escritorio — 31 de agosto de 2026
 
 GNOME 50 sobre Ubuntu 26.04, Wayland. El `CLAUDE.md` dice **qué es** el proyecto;
 acá va **en qué anda** el escritorio hoy. El relato largo de cada sesión —
@@ -15,15 +15,23 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 ## Dónde retomar
 
 Rama `claude/linux-ubuntu-windows-migration-whc0li`, **14 commits adelante de
-`origin`**: falta pushear, y es lo único pendiente. Está trabado por afuera del
+`origin`**: falta pushear. Está trabado por afuera del
 repo: esta máquina no tiene con qué autenticarse contra GitHub — no hay `gh`, no
 hay `credential.helper` configurado y no hay claves SSH, así que `git push` muere
 con `could not read Username for 'https://github.com'`. Se destraba con
 `sudo apt install gh && gh auth login` (interactivo, lo corre la persona), o
 generando una clave SSH y cambiando el remoto a `git@github.com:`.
 
-El dock quedó verificado entero, sin necesidad de cerrar sesión: ver
-`gshell.sh patch` más abajo, que es la novedad que más cambia el día a día.
+**Falta un login limpio para el dock.** Los dos arreglos del 31/08 —umbral de
+revelado y ciclado del clic— están verificados, pero la sesión viva quedó con una
+barrera de presión huérfana (GNOME marcó `macos-dock` INACTIVE al detectar los
+archivos cambiados y no corrió su `disable()`), así que ahí ya no se puede medir
+el revelado: los choques contra la barrera nueva no llegan. La prueba en el
+sandbox sí es limpia. Al volver a entrar, repetir el gesto suave contra el borde
+de abajo y los tres clics sobre el icono de la terminal.
+
+Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
+(ver «Abierto»).
 
 ```bash
 bash setup/gshell.sh check          # unsafe mode: Alt+F2 → lg → global.context.unsafe_mode = true
@@ -33,66 +41,57 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Qué funciona, verificado
 
-- **PaperWM ya no tira la sesión al abrir Discord.** Era un SIGSEGV del shell:
-  el timeout de `workspace-changed` redimensionaba una `MetaWindow` que mutter
-  ya estaba desmanejando, y el splash de Discord se cierra a los ~990 ms, justo
-  adentro de esa ventana. Dos guards en `tiling.js`, versionados en
-  `setup/patches/paperwm-timeout-ventana-muerta.patch`.
-  Verificado el 30/08: cinco rondas de abrir y cerrar Discord, mismo PID del
-  shell, cero segfaults, y el journal muestra el splash — o sea que la prueba
-  ejercitó el caso real, no uno en el que Discord no llegó a abrir.
-- **El dock se revela al empujar el borde de abajo, y se esconde al irse.**
-  Verificado el 30/08 con diez ciclos seguidos por el dispositivo virtual de
-  Clutter, y repetido con el arreglo de `_scheduleHide()` ya cargado, esta vez
-  **dejando el puntero quieto 1,2 s sobre el borde** antes de alejarlo: las diez
-  veces revela, se queda mientras el puntero está encima y esconde en cuanto se
-  va, con la Y de reposo en **987 exacto en las diez** — la deriva de 20 px por
-  ciclo está muerta. Los contadores muestran el mecanismo: 4 reagendas de
-  `_scheduleHide` por ciclo (la inicial más 1200/400) y un `_hide` por ciclo.
-  Confirmado en píxeles: los ocho iconos aparecen en la captura del recorte.
-  Cuidado al repetirlo: **si se toca el mouse durante la tanda, la prueba miente**
-  — el puntero físico pisa al virtual y `_pointerNearEdge()` mide la mano, no el
-  script. La versión buena del test descarta el ciclo si el puntero se corrió más
-  de 40 px de donde lo dejó.
-  Las tres causas que había: barrera mal puesta (ahora `getWorkAreaForMonitor()`
-  con 1 px de recorte por punta, porque el segundo monitor arranca en x=1920),
-  `_isAnimating` colgado en `true` (Clutter no llama `onComplete` al cancelar una
-  transición), y las animaciones leyendo `container.y` en vez de la Y de reposo.
-- **El dock se esconde de nuevo.** `dockVisibility.js` colgaba
-  `enter-event`/`leave-event` de la raíz del dock, que es `reactive: false` a
-  propósito — Clutter no manda cruces a un actor no reactivo, así que esos
-  handlers eran código muerto y el dock se revelaba una vez y se quedaba visible
-  para siempre. Medido: 0 eventos en la raíz contra 4 en el icon box, y el
-  `_scheduleHide()` viejo salía sin reagendar. Ahora se reagenda mientras el
-  puntero siga encima. Verificado en caliente con `gshell.sh patch`; el archivo
-  en `~/.local` ya está, así que el próximo login arranca con esto puesto.
+- **PaperWM ya no tira la sesión al abrir Discord.** Era un SIGSEGV del shell al
+  redimensionar una `MetaWindow` que mutter ya estaba desmanejando. Dos guards en
+  `tiling.js`, en `setup/patches/paperwm-timeout-ventana-muerta.patch`. Cinco
+  rondas de abrir y cerrar Discord, mismo PID del shell, cero segfaults.
+- **El dock se revela y se esconde sin derivar.** Diez ciclos por el dispositivo
+  virtual de Clutter: las diez revela, se queda mientras el puntero está encima,
+  esconde al irse, y la Y de reposo queda en **987 exacto en las diez** — la
+  deriva de 20 px por ciclo está muerta. Las tres causas (barrera mal puesta,
+  `_isAnimating` colgado, animaciones leyendo `container.y`) están en
+  `setup/README.md`. **Si se toca el mouse durante la tanda la prueba miente**:
+  el puntero físico pisa al virtual, y el test bueno descarta el ciclo si el
+  puntero se corrió más de 40 px de donde lo dejó.
+- **El dock se esconde de nuevo.** Los `enter-event`/`leave-event` colgados de la
+  raíz eran código muerto: es `reactive: false` a propósito y Clutter no le manda
+  cruces (medido: 0 en la raíz contra 4 en el icon box). Ahora `_scheduleHide()`
+  mira dónde está el puntero y se reagenda mientras siga encima.
+- **El revelado ya no pide un empujón de 100 px.** Era la causa del «se revela
+  una vez y después no»: la presión que cuenta mutter es cuánto **te habrías
+  pasado de largo**, no cuánto recorriste hasta el borde. El primer gesto —un
+  barrido desde el medio de la pantalla— da 15 choques y dispara; el segundo, con
+  el puntero ya cerca del borde, da uno o dos y acumula ~18 px, y con umbral 100
+  no dispara nunca. Barrido de valores con el mismo gesto: 100, 40 y 20 no
+  revelan; 10, 5 y 1 sí. El roce lateral pegado al borde no dispara con ninguno,
+  así que el falso positivo que justificaba el umbral alto no existe. Default 5,
+  configurable como `reveal-threshold`. En el sandbox el `enable()` completo
+  imprime `umbral 5px/1000ms`.
+- **El clic en el icono cicla, y empieza por la ventana de tu monitor.** Lo que
+  había devolvía la primera del orden de apilado, sin relación con dónde estás
+  mirando: con dos terminales, una por monitor, clickeás en la pantalla izquierda
+  y aparece la de la derecha. Verificado: cinco clics alternando 0→1→0→1→0 con el
+  foco siguiendo, y el orden invirtiéndose al mover el puntero al otro monitor.
+  **El cursor no salta**: medido antes y después en siete clics y dos
+  `activate()` directos, no se movió ni una vez. Quien mueve ventanas entre
+  monitores es PaperWM, que se las lleva a su monitor al restaurarlas y le gana a
+  `move_to_monitor()`.
 - **No hay fantasma al minimizar.** El guard vive en código propio
   (`mactahoe-tweaks/ghostGuard.js`), no en el parche de PaperWM: ese parche está
   bien puesto pero **no llega a correr** para esas ventanas. Regla única: una
   ventana minimizada no se dibuja.
-- **La transparencia de las ventanas tiene interruptor.** Toggle
-  "Transparencia" en el hub (`blurControl.js` de `mactahoe-tweaks`): el cuerpo
-  prende y apaga el componente `applications` de Blur my Shell, y el menú saca de
-  la transparencia a la ventana enfocada o la devuelve. Atajos `Super+B` y
-  `Super+Shift+B`. Verificado en la sesión viva: con la opción prendida Blur my
-  Shell tiene 3 ventanas con efecto, con la opción apagada 0, y el botón aparece
-  en el hub con su subtítulo ("Salvo 3") — comprobado en píxeles.
-
-- **Blur my Shell ya no acumula ventanas.** Bug propio de esa extensión, no
-  nuestro: `update_all_windows()` sacaba el efecto con `remove_blur()` pero
-  dejaba la entrada en `meta_window_map`, y enseguida volvía a registrar todo con
-  un `bms_pid` nuevo al azar. Cada cambio de la lista de exclusión sumaba 5
-  entradas y no sacaba ninguna (medido: 5 → 10 → 15, la misma ventana 12 veces),
-  con sus señales duplicadas encima. Parcheado en sitio y versionado en
+- **La transparencia de las ventanas tiene interruptor.** Toggle "Transparencia"
+  en el hub (`blurControl.js`): el cuerpo prende y apaga el componente
+  `applications` de Blur my Shell, el menú le saca la transparencia a la ventana
+  enfocada o se la devuelve. Atajos `Super+B` y `Super+Shift+B`. Verificado: con
+  la opción prendida Blur my Shell tiene 3 ventanas con efecto, apagada 0, y el
+  botón aparece en el hub con su subtítulo — comprobado en píxeles.
+- **Blur my Shell ya no acumula ventanas.** Bug de esa extensión:
+  `update_all_windows()` dejaba la entrada en `meta_window_map` y volvía a
+  registrar todo con un id nuevo (medido: 5 → 10 → 15, la misma ventana 12
+  veces). Parcheado en
   `setup/patches/blur-my-shell-mapa-de-ventanas-que-crece.patch`; queda en 3
-  entradas para 3 ventanas, estable a lo largo de seis ciclos. Importa porque el
-  toggle nuevo invita a usar justo ese camino.
-
-- **La barra de arriba a la derecha tiene un solo botón**, donde había cinco
-  iconos: 132 px → 60 px, medido. Los cinco no eran indicadores sueltos, viven
-  adentro del hub, así que se esconde la caja entera y se pone un icono propio.
-- **Flatpaks, Discord por `.deb`, fuentes, atajos**: todo cerrado. El detalle en
-  `ESTADO-historial.md`.
+  entradas para 3 ventanas, estable en seis ciclos.
 
 ## Abierto
 
@@ -102,7 +101,13 @@ bash setup/gshell.sh find macos-dock-root
   `_applyDockPosition()` `:497`).
 - **`auto-hide` aparece en `false` al arrancar la sesión** aunque se lo haya
   dejado en `true`. No se investigó si lo pisa el reinicio o el arranque de la
-  extensión.
+  extensión. Cuesta una sesión: sin auto-hide no hay `DockVisibility`, así que
+  medir el revelado da cero y parece un bug del revelado.
+- **GNOME desactiva `macos-dock` al cambiarle los archivos** (queda «Activado:
+  sí, Estado: INACTIVE») y ni `gnome-extensions enable` ni `enableExtension()`
+  la reviven; lo que sí funciona es `stateObj.enable()` a mano por Eval. Pero
+  las barreras de la instancia anterior quedan vivas y se comen los eventos:
+  para medir el revelado después de tocar archivos hace falta login o sandbox.
 - Curiosidad técnica, no un bug: por qué el `showHandler` parcheado de PaperWM no
   corre para las ventanas que dejaban fantasma. El guard propio ya cubre el
   síntoma.

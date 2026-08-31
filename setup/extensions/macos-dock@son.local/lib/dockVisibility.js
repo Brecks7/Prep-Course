@@ -6,9 +6,25 @@ import * as Layout from "resource:///org/gnome/shell/ui/layout.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { SignalManager } from "./signalManager.js";
 // Cuánta presión hay que hacer contra el borde para que aparezca el dock, y en
-// cuánto tiempo. Los valores son los de ubuntu-dock: menos que esto y el dock
-// salta solo al pasar rozando; más, y hay que insistir.
-const PRESSURE_THRESHOLD = 100;
+// cuánto tiempo.
+//
+// El default era 100 px, el de ubuntu-dock, y ahí estaba el «se revela una vez y
+// después no». La presión que cuenta mutter no es cuánto recorriste hasta el
+// borde: es cuánto **te habrías pasado** de largo, la suma de los `dy` de los
+// eventos que chocan la barrera. Medido con el dispositivo virtual, dos gestos:
+//
+//   · barrido desde el medio de la pantalla, 192 px en 200 ms → 15 choques,
+//     dispara. Es el primer paso, el que siempre funciona.
+//   · el puntero ya cerca del borde, 90 px en 250 ms → 1 o 2 choques, ~18 px de
+//     presión. Con umbral 100 no dispara nunca, por más veces que lo intentes.
+//
+// Barriendo umbrales con ese segundo gesto: 100, 40 y 20 no revelan; 10, 5 y 1
+// sí. Y el falso positivo que el umbral alto venía a evitar no aparece: rozar el
+// borde de lado a lado (600 px en horizontal, pegado a la última fila) no dispara
+// con ningún umbral, porque moverse *a lo largo* de la barrera no suma presión.
+// Por eso el default baja a 5 px — tocar el borde y seguir un instante — y queda
+// en el schema como `reveal-threshold` por si con ventanas maximizadas molesta.
+const PRESSURE_THRESHOLD = 5;
 const PRESSURE_TIMEOUT = 1000;
 // Gracia antes de esconderlo de nuevo. Cubre dos casos: que la barrera dispare
 // sin que el puntero llegue a entrar al dock, y el rebote al salir y volver.
@@ -22,6 +38,7 @@ export class DockVisibility {
     _monitor = null;
     _animationDuration;
     _showThreshold;
+    _revealThreshold;
     _hideTimeoutId = null;
     _barrier = null;
     _pressureBarrier = null;
@@ -31,13 +48,26 @@ export class DockVisibility {
     // baja 20 px más en cada ciclo.
     _shownY = null;
     _edge; // 0=bottom, 1=left, 2=right, 3=top
-    constructor(container, intellihide, _dockHeight, _marginBottom, animationDuration = 200, showThreshold = 25, edge = 0) {
+    constructor(container, intellihide, _dockHeight, _marginBottom, animationDuration = 200, showThreshold = 25, edge = 0, revealThreshold = PRESSURE_THRESHOLD) {
         this._signals = new SignalManager();
         this._container = container;
         this._intellihide = intellihide;
         this._animationDuration = animationDuration;
         this._showThreshold = showThreshold;
         this._edge = edge;
+        this._revealThreshold = revealThreshold;
+    }
+    /**
+     * Cambia cuánto hay que empujar el borde. Si el dock está oculto se rehace
+     * la barrera en el acto; si está a la vista no hay ninguna —`_show()` la
+     * destruye— y el valor nuevo entra solo cuando `_hide()` la vuelva a crear.
+     */
+    updateRevealThreshold(px) {
+        this._revealThreshold = Math.max(1, Math.min(200, px));
+        if (this._monitor && this._barrier) {
+            this._destroyBarrier();
+            this._createBarrier();
+        }
     }
     setEdge(edge) {
         this._edge = edge;
@@ -183,7 +213,8 @@ export class DockVisibility {
                 return;
             }
         }
-        this._pressureBarrier = new Layout.PressureBarrier(PRESSURE_THRESHOLD, PRESSURE_TIMEOUT, Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW);
+        const umbral = this._revealThreshold ?? PRESSURE_THRESHOLD;
+        this._pressureBarrier = new Layout.PressureBarrier(umbral, PRESSURE_TIMEOUT, Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW);
         this._pressureBarrier.connect("trigger", () => {
             console.debug("[macos-dock] barrera disparada — revelando el dock");
             this._cancelHide();
@@ -194,7 +225,7 @@ export class DockVisibility {
         });
         this._pressureBarrier.addBarrier(this._barrier);
         console.debug(`[macos-dock] barrera de presión en (${x1},${y1})-(${x2},${y2}) ` +
-            `umbral ${PRESSURE_THRESHOLD}px/${PRESSURE_TIMEOUT}ms`);
+            `umbral ${umbral}px/${PRESSURE_TIMEOUT}ms`);
     }
     _destroyBarrier() {
         if (this._pressureBarrier) {

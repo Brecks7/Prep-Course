@@ -653,3 +653,41 @@ Noche del 29 de agosto de 2026 — escritorio y migración desde Windows:
   modelo de la skill había quedado viejo**: los alias cambian seguido y hay que
   listarlos contra la API antes de usarlos. Al 29/08/2026 el más nuevo es
   `gemini-3.7-flash`. `gemini` y `codex` instalados con nvm.
+
+## Podado de `ESTADO.md` el 31 de agosto de 2026
+
+Relato completo de tres cosas ya cerradas, resumidas allá a una línea:
+
+- **PaperWM ya no tira la sesión al abrir Discord.** Era un SIGSEGV del shell:
+  el timeout de `workspace-changed` redimensionaba una `MetaWindow` que mutter
+  ya estaba desmanejando, y el splash de Discord se cierra a los ~990 ms, justo
+  adentro de esa ventana. Dos guards en `tiling.js`, versionados en
+  `setup/patches/paperwm-timeout-ventana-muerta.patch`.
+  Verificado el 30/08: cinco rondas de abrir y cerrar Discord, mismo PID del
+  shell, cero segfaults, y el journal muestra el splash — o sea que la prueba
+  ejercitó el caso real, no uno en el que Discord no llegó a abrir.
+
+- **El dock se esconde de nuevo.** `dockVisibility.js` colgaba
+  `enter-event`/`leave-event` de la raíz del dock, que es `reactive: false` a
+  propósito — Clutter no manda cruces a un actor no reactivo, así que esos
+  handlers eran código muerto y el dock se revelaba una vez y se quedaba visible
+  para siempre. Medido: 0 eventos en la raíz contra 4 en el icon box, y el
+  `_scheduleHide()` viejo salía sin reagendar. Ahora se reagenda mientras el
+  puntero siga encima. Verificado en caliente con `gshell.sh patch`; el archivo
+  en `~/.local` ya está, así que el próximo login arranca con esto puesto.
+
+- **Blur my Shell ya no acumula ventanas.** Bug propio de esa extensión, no
+  nuestro: `update_all_windows()` sacaba el efecto con `remove_blur()` pero
+  dejaba la entrada en `meta_window_map`, y enseguida volvía a registrar todo con
+  un `bms_pid` nuevo al azar. Cada cambio de la lista de exclusión sumaba 5
+  entradas y no sacaba ninguna (medido: 5 → 10 → 15, la misma ventana 12 veces),
+  con sus señales duplicadas encima. Parcheado en sitio y versionado en
+  `setup/patches/blur-my-shell-mapa-de-ventanas-que-crece.patch`; queda en 3
+  entradas para 3 ventanas, estable a lo largo de seis ciclos. Importa porque el
+  toggle nuevo invita a usar justo ese camino.
+
+- **La barra de arriba a la derecha tiene un solo botón**, donde había cinco
+  iconos: 132 px → 60 px, medido. Los cinco no eran indicadores sueltos, viven
+  adentro del hub, así que se esconde la caja entera y se pone un icono propio.
+- **Flatpaks, Discord por `.deb`, fuentes, atajos**: todo cerrado. El detalle en
+  `ESTADO-historial.md`.
