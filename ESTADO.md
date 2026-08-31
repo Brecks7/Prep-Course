@@ -40,6 +40,32 @@ revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
 es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
 tres clics sobre el icono de la terminal.
 
+**El RGB es un frente pendiente, con el hardware ya identificado.** El objetivo,
+en palabras del usuario: prender, apagar y cambiar el color de todo desde un solo
+lado. Lo que hay, verificado en la máquina:
+
+| Qué | Cómo se llega |
+|---|---|
+| Placa **MSI X670E GAMING PLUS WIFI (MS-7E16)**, Mystic Light | HID por USB `0db0:0076` → OpenRGB |
+| GPU **ASUS** Navi 21 (subsistema `1043:04fa`) — Aura | SMBus → OpenRGB, pide `i2c-dev` cargado |
+| Dos tiras **`LEDDMX-03-885E`** (`AC:C2:01:7C:88:5E`) y **`-815E`** (`AC:C2:01:DC:81:5E`) | BLE, ya Paired+Trusted en el adaptador `84:9E:56:03:57:D0`. El USB sólo les da corriente |
+
+Las tiras son familia **ELK-BLEDOM**: servicio `0000ffe0`, se escribe en la
+característica `ffe1`, color `7e 00 05 03 RR GG BB 00 ef` y on/off
+`7e 00 04 f0|00 …ef`. Hay variantes de firmware: **el primer paso es confirmar
+esos paquetes contra una tira**, no darlos por buenos.
+
+Hoy no hay nada instalado: `openrgb` no está (candidato de apt `0.9+git20251009`,
+y hay Flatpak `org.openrgb.OpenRGB`), `bleak` tampoco, y `i2c-dev` **no está
+cargado** (sí `i2c_piix4`, que es el bus). Forma pensada: CLI `rgbctl` en venv
+propio bajo `setup/bin/rgb/` (nunca `sudo pip`), empaquetado como
+`setup/modules/70-rgb.sh` con su entrada en `install.sh`, `undo.sh` y `doctor.sh`,
+y un `QuickMenuToggle` en el hub que lo llame con `Gio.Subprocess` **asíncrono**
+—una llamada BLE bloqueante adentro del shell congela el escritorio un segundo.
+Aviso que vale una sesión: escribir por SMBus a los módulos de RAM puede colgar el
+bus; si la detección no ve la RAM se prueba `acpi_enforce_resources=lax` y no se
+fuerza más.
+
 Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
 (ver «Abierto»).
 
