@@ -11,33 +11,23 @@ seguidas con el mismo bug.
 
 ---
 
-## Dónde retomar (última actualización: 30 de agosto de 2026, mañana)
+## Dónde retomar (última actualización: 30 de agosto de 2026, noche)
 
-Árbol de git limpio, todo commiteado (`dbfe89c`).
+Árbol de git limpio. La rama `claude/linux-ubuntu-windows-migration-whc0li` está
+**varios commits adelante de `origin`**: falta pushear.
 
-**Listo y verificado en pantalla**: el fantasma al minimizar, el toggle del dock
-(ubicación y acción), el portapapeles dentro del hub, y las cuatro apps nuevas
-(Chrome, Krita, LibreSprite, Pixelorama).
+**Todo lo de esta tanda es código de extensión o de PaperWM, o sea que no se ve
+hasta el próximo inicio de sesión.** Desde GNOME 50 no hay forma de recargar una
+extensión en vivo (`ReloadExtension` responde `is deprecated and does not work`),
+y `Alt+F2 r` no existe en Wayland. Lo que corre ahora es el código viejo.
 
-**Lo único pendiente de verse**: el toggle **Dock** y el ítem **Portapapeles** son
-código nuevo de extensión, así que aparecen recién en el **próximo inicio de
-sesión**. No hay que cerrar sesión a propósito; cuando toque, verificar:
+**Qué hay que verificar al volver del logout** — el detalle está en «Qué
+verificar después de cerrar sesión», más abajo:
 
-1. Abrir el hub → tiene que estar **Dock · Fijo** (antes de "Estilo oscuro") y
-   **Portapapeles** con el historial.
-2. Apagar **Dock** → el dock se esconde y vuelve al empujar el borde de abajo.
-3. Minimizar dos o tres ventanas → escritorio limpio, sin semáforos grises
-   flotando. El guard ya no depende de Eval: entra con `mactahoe-tweaks`.
-
-**Ojo con una cosa**: el guard que está corriendo *ahora* se inyectó en caliente
-por Eval y **muere con la sesión**. Eso no es un problema —el mismo guard está
-instalado en `~/.local/share/gnome-shell/extensions/mactahoe-tweaks@son.local/`
-y arranca solo en el próximo login—, pero si al volver aparece un fantasma, lo
-primero a mirar es si `mactahoe-tweaks` quedó `ACTIVE`:
-
-```bash
-gnome-extensions info mactahoe-tweaks@son.local | grep Estado
-```
+1. Abrir Discord unas cuantas veces: el shell no se tiene que caer.
+2. Apagar el toggle **Dock** y empujar el borde de abajo: el dock tiene que
+   volver, y tiene que seguir volviendo la décima vez.
+3. Mirar la barra de arriba a la derecha: un solo icono, dos interruptores.
 
 **Pendientes reales**, ninguno urgente:
 
@@ -48,6 +38,98 @@ gnome-extensions info mactahoe-tweaks@son.local | grep Estado
   curiosidad técnica, no un bug abierto.
 - Si alguna Flatpak no abre después de un login:
   `systemctl --user restart xdg-document-portal` antes que cualquier otra cosa.
+
+---
+
+## Sesión del 30 de agosto de 2026 (noche)
+
+### 1. PaperWM tiraba la sesión entera — arreglado
+
+El síntoma que se reportó fue "se me reinició la sesión al abrir Discord". No fue
+Discord: fue un **SIGSEGV de GNOME Shell** con la traza en `tiling.js:3589` ←
+`utils.js:505`.
+
+El handler de `workspace-changed` de PaperWM deja corriendo un timeout de
+100 ms × 10 que redimensiona la ventana recién aparecida. **El splash de Discord
+se cierra a los ~990 ms**, o sea justo adentro de esa ventana de tiempo: el
+`move_resize_frame()` corre sobre una `MetaWindow` que mutter ya está
+desmanejando y el shell se cae. Como se cae el shell, se cae la sesión.
+
+Dos guards, los dos en `tiling.js`:
+
+- **El del crash**: si `metaWindow.get_compositor_private()` no devuelve actor, no
+  hay ventana viva que redimensionar → `return false`, que es el early exit de
+  `Utils.periodic_timeout` y además dispara el `onComplete`, así que el timeout
+  tampoco queda colgado en `workspaceChangeTimeouts`. El acceso va en `try`
+  porque si el GObject ya fue desalojado, tocarlo tira excepción.
+- **Uno de yapa**: `done()` hacía `splice(indexOf(t), 1)` sin chequear, y cuando
+  `indexOf` devuelve `-1`, `splice(-1, 1)` **borra el último elemento** — el
+  timeout de otra ventana.
+
+Va versionado en `setup/patches/paperwm-timeout-ventana-muerta.patch` y
+registrado en `50-extensions.sh`, así que sobrevive a una actualización de
+PaperWM desde extensions.gnome.org. Verificado: aplica limpio sobre el
+`tiling.js` de fábrica y produce un resultado byte-idéntico al instalado.
+
+### 2. El dock escondía pero no volvía — tres causas, no una
+
+- **La barrera de presión estaba mal puesta.** Iba de `(0,1080)` a `(1920,1080)`,
+  el ancho crudo del monitor. Pero DP-3 (2560×1440) arranca en `x=1920`, así que
+  **la punta derecha de la barrera caía adentro del otro monitor**, donde
+  `y=1080` no es borde de pantalla. Ahora usa
+  `Main.layoutManager.getWorkAreaForMonitor()` y recorta 1 px de cada lado, igual
+  que `ubuntu-dock`: `(1,1080)-(1919,1080)`. Medido en el journal del sandbox.
+- **`_isAnimating` se colgaba en `true`.** Sólo bajaba en el `onComplete` del
+  `ease`, y **Clutter no llama `onComplete` cuando la transición se cancela**.
+  Con la bandera trabada, `_show()` retornaba para siempre en su primera línea.
+  Ahora se resetea en `start()`/`stop()` y cada animación hace
+  `remove_all_transitions()` antes de arrancar.
+- **Deriva de 20 px por ciclo.** Las animaciones tomaban `container.y` como
+  posición de reposo, y como el dock quedaba a media animación, ese valor se iba
+  corriendo solo. Ahora usan la Y que manda `_updatePosition()` a través de
+  `updateShownY()`, que **era un stub vacío** desde que se escribió.
+
+De paso, la barrera ahora loguea al crearse y al dispararse: antes, si mutter la
+rechazaba, fallaba en silencio absoluto.
+
+### 3. La barra de arriba a la derecha, colapsada a un botón
+
+Lo pedido era sacar los cinco iconos de la barra porque su función ya está
+adentro del hub. **Medido antes de tocar nada** (con una extensión de volcado
+descartable en el sandbox, no leyendo CSS ni mirando la captura): de esos cinco,
+**ninguno era un indicador suelto**. Los cinco viven adentro del botón del hub,
+en su `panel-status-indicators-box` — red cableada, notificaciones silenciadas,
+volumen, perfil de energía y apagado; más unos diez en `w=0`. Todo el resto de
+`_rightBox` (grabación de pantalla, compartir pantalla, click por reposo,
+accesibilidad, fuente de entrada) ya estaba en `vis=false`.
+
+Por eso esconderlos a secas no servía: el botón quedaba de ancho cero y no había
+dónde hacer clic para abrir el hub. Lo que se hace en `panelDeclutter.js` es
+esconder **la caja entera** y poner un icono propio en su lugar, los dos
+interruptores del Control Center de macOS (`icons/hub-symbolic.svg`, dibujado a
+mano porque MacTahoe-dark no trae ese glifo).
+
+Dos cosas que no eran obvias:
+
+- **Se esconde la caja, no cada indicador.** `SystemIndicator` recalcula su
+  propio `visible` cada vez que cambia el estado de alguno de sus iconos, así que
+  un `hide()` sobre un indicador se deshace solo apenas te conectás a una red o
+  movés el volumen. Sobre la caja contenedora no hay nadie que lo revierta.
+- **El icono va en el índice 0.** `PanelMenu.ButtonBox` mide y aloca **sólo su
+  primer hijo** (`vfunc_get_preferred_width` y `vfunc_allocate` hacen
+  `get_first_child()`), sin mirar si está visible. Con el icono agregado al
+  final, el botón seguía midiendo los 132 px de la caja escondida y el icono ni
+  se alocaba. Puesto primero: **132 px → 60 px**, medido en el sandbox.
+
+El icono es un `Gio.FileIcon` a un archivo `*-symbolic.svg`; el sufijo es lo que
+hace que GTK lo recoloree con el color de la barra. El SVG va todo con `fill` y
+sin un solo `stroke`, porque el recoloreo de symbolic sólo reemplaza el relleno y
+un contorno se quedaría negro sobre una barra clara. **Eso último es lo único de
+esta tanda que no se pudo medir y hay que mirar con los ojos después del login.**
+
+`clipboardQuick.js` quedó sólo con el toggle: el mecanismo de esconder
+indicadores sueltos (la lista `ESCONDER`) se mudó a `panelDeclutter.js`, que es
+el módulo que limpia la barra.
 
 ---
 
@@ -220,14 +302,34 @@ login, ninguna Flatpak arranca y el error no dice "portal": dice `bwrap`.
 
 ## Qué verificar después de cerrar sesión
 
-1. **Fantasma**: minimizar la terminal, Brave y Discord, una por una. El
+Antes que nada, que las dos extensiones hayan levantado — si alguna quedó en
+ERROR, todo lo de abajo va a fallar por el mismo motivo:
+
+```bash
+gnome-extensions info mactahoe-tweaks@son.local | grep -i estado
+gnome-extensions info macos-dock@son.local | grep -i estado
+```
+
+1. **Que no se caiga la sesión**: abrir Discord tres o cuatro veces. Era el caso
+   que reventaba el shell. Si vuelve a pasar, el parche no entró:
+   `grep -c "get_compositor_private" ~/.local/share/gnome-shell/extensions/paperwm@paperwm.github.com/tiling.js`
+2. **Revelado del dock**: apagar el toggle **Dock** en el hub y empujar el borde
+   de abajo. Tiene que volver, y **hay que repetirlo diez veces**: las dos causas
+   que quedaban (`_isAnimating` colgado y la deriva de 20 px) no se ven en el
+   primer intento, se ven cuando se acumulan. La barrera deja rastro:
+   `journalctl --user -b -g "macos-dock"` tiene que mostrar
+   `barrera de presión en (1,1080)-(1919,1080)` y un `barrera disparada` por cada
+   empujón.
+3. **La barra**: `bash setup/shot.sh --crop 1200,0,720,44`. Tiene que haber **un
+   solo icono** (dos interruptores apilados) donde había cinco. Lo que hay que
+   mirar con atención es **el color**: si sale negro sobre la barra oscura, GTK no
+   lo tomó como symbolic y hay que registrar el directorio de iconos en el tema en
+   vez de cargarlo por ruta.
+4. **Fantasma**: minimizar la terminal, Brave y Discord, una por una. El
    escritorio tiene que quedar limpio. Con evidencia:
    `bash setup/shot.sh --out /tmp/min.png` y mirar el semáforo — si aparecen tres
    círculos grises donde estaba la ventana, el fantasma sigue.
-2. **Botón del dock**: abrir el hub de arriba a la derecha. Tiene que estar el
-   toggle **Dock · Fijo**. Apagarlo esconde el dock; el dock vuelve al empujar el
-   borde de abajo; encenderlo lo clava otra vez.
-3. **Flatpaks**: si alguna no abre, `systemctl --user restart xdg-document-portal`
+5. **Flatpaks**: si alguna no abre, `systemctl --user restart xdg-document-portal`
    antes de investigar cualquier otra cosa.
 
 Si el fantasma **sigue**, no cerrar sesión otra vez a ciegas: habilitar unsafe

@@ -6,8 +6,10 @@
 // accesibilidad, fuente de entrada) miden 0 y no se ven. GSConnect ya vive
 // adentro del hub como toggle.
 //
-// Ahora: el icono de la barra se esconde y en el hub aparece "Portapapeles",
-// un QuickMenuToggle cuyo menú lista lo último copiado.
+// Ahora: en el hub aparece "Portapapeles", un QuickMenuToggle cuyo menú lista
+// lo último copiado. De esconder el icono de la barra se ocupa
+// `panelDeclutter.js`, que es el módulo que limpia la barra entera; acá sólo
+// queda el toggle.
 //
 // Por qué se lee el historial de Clipboard Indicator en vez de abrir su menú:
 // un PopupMenu no se muestra si su `sourceActor` está oculto — probado en la
@@ -41,11 +43,6 @@ const REGISTRO = GLib.build_filenamev([
 
 const MAX_ITEMS = 8;
 const MAX_LARGO = 44;
-
-// Los indicadores de extensiones que se esconden de la barra: su función queda
-// dentro del hub. Se los busca por el nombre de clase de su actor porque el
-// "role" con el que se registran en statusArea es privado de cada extensión.
-const ESCONDER = ['ClipboardIndicator'];
 
 function leerHistorial() {
     try {
@@ -146,8 +143,6 @@ export const ClipboardIndicatorQS = GObject.registerClass(
 export class ClipboardQuick {
     constructor() {
         this._indicador = null;
-        this._escondidos = [];
-        this._childAddedId = 0;
     }
 
     enable() {
@@ -168,40 +163,9 @@ export class ClipboardQuick {
         }
         if (!colocado)
             qs.addExternalIndicator(this._indicador);
-
-        this._esconderSueltos();
-        // Clipboard Indicator puede cargar después que nosotros: en ese caso su
-        // icono aparece más tarde en la barra y hay que esconderlo entonces.
-        this._childAddedId = Main.panel._rightBox.connect('child-added',
-            () => this._esconderSueltos());
-    }
-
-    _esconderSueltos() {
-        for (const bin of Main.panel._rightBox.get_children()) {
-            const hijo = bin.get_children?.()[0];
-            if (!hijo || !ESCONDER.includes(hijo.constructor.name))
-                continue;
-            if (this._escondidos.includes(bin))
-                continue;
-            bin.hide();
-            this._escondidos.push(bin);
-        }
     }
 
     disable() {
-        if (this._childAddedId) {
-            Main.panel._rightBox.disconnect(this._childAddedId);
-            this._childAddedId = 0;
-        }
-        for (const bin of this._escondidos) {
-            try {
-                bin.show();
-            } catch (_e) {
-                // El indicador ya no existe: su extensión se desactivó antes.
-            }
-        }
-        this._escondidos = [];
-
         if (this._indicador) {
             this._indicador.quickSettingsItems.forEach(i => i.destroy());
             this._indicador.destroy();

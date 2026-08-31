@@ -3,6 +3,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {ClipboardQuick} from './clipboardQuick.js';
 import {GhostGuard} from './ghostGuard.js';
 import {MenuBlur} from './menuBlur.js';
+import {PanelDeclutter} from './panelDeclutter.js';
 import {PanelStyle} from './panelStyle.js';
 import {WorkspaceToggle} from './workspaceToggle.js';
 
@@ -26,9 +27,17 @@ export default class MacTahoeTweaks extends Extension {
         // El portapapeles pasa de icono suelto en la barra a ítem del hub.
         this._clipboardQuick = new ClipboardQuick();
         this._clipboardQuick.enable();
+
+        // Va último: colapsa la barra a un solo botón, y para eso necesita que
+        // los indicadores que se mudan al hub ya estén puestos.
+        this._panelDeclutter = new PanelDeclutter(this.path);
+        this._panelDeclutter.enable();
     }
 
     disable() {
+        this._panelDeclutter?.disable();
+        this._panelDeclutter = null;
+
         this._clipboardQuick?.disable();
         this._clipboardQuick = null;
 

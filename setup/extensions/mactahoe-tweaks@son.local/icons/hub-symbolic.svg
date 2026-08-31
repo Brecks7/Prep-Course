@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- El glifo del hub: dos interruptores apilados, como el Control Center de
+     macOS. Todo va con `fill` y ningún `stroke`: el recoloreo de iconos
+     symbolic de GTK sólo reemplaza el relleno, así que un contorno hecho con
+     stroke se quedaría del color original sobre una barra clara. Las pistas
+     son anillos (subpath exterior + interior con fill-rule evenodd). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <path fill="#222222" fill-rule="evenodd" d="M4.25,1.5 H11.75 A2.75,2.75 0 0 1 11.75,7 H4.25 A2.75,2.75 0 0 1 4.25,1.5 Z M4.25,2.6 H11.75 A1.65,1.65 0 0 1 11.75,5.9 H4.25 A1.65,1.65 0 0 1 4.25,2.6 Z M4.25,9 H11.75 A2.75,2.75 0 0 1 11.75,14.5 H4.25 A2.75,2.75 0 0 1 4.25,9 Z M4.25,10.1 H11.75 A1.65,1.65 0 0 1 11.75,13.4 H4.25 A1.65,1.65 0 0 1 4.25,10.1 Z"/>
+  <circle fill="#222222" cx="4.25" cy="4.25" r="1.35"/>
+  <circle fill="#222222" cx="11.75" cy="11.75" r="1.35"/>
+</svg>
