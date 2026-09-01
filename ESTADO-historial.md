@@ -912,3 +912,37 @@ Resumido en `ESTADO.md`; acá el detalle de cómo se hizo y qué se verificó.
   de la tabla GPT en `~/.setup-ubuntu-backups/gpt-nvme0n1-20260831.bak`, y de
   `/etc/fstab` en `/etc/fstab.bak-20260831`. **Windows va a correr `chkdsk` solo en
   su próximo arranque: es lo normal después de un resize, no es que se haya roto.**
+
+
+## RGB — las tiras BLE no resuelven GATT (01/09/2026)
+
+OpenRGB cubrió placa y GPU sin drama (ver `ESTADO.md`). Las dos tiras
+`LEDDMX-03-885E` (`AC:C2:01:7C:88:5E`) y `-815E` (`AC:C2:01:DC:81:5E`) no.
+
+Lo que se comprobó, en orden:
+
+1. Las dos **anuncian**: aparecen en un `bluetoothctl scan on` de 20 s.
+2. Siguen `Paired: yes` / `Trusted: yes`, `Connected: no` en reposo.
+3. `bluetoothctl connect AC:C2:01:7C:88:5E` **funciona**: `Connected: yes`,
+   `Connection successful`, y en `info` figura el servicio esperado
+   `0000ffe0-0000-1000-8000-00805f9b34fb`.
+4. Pero **`ServicesResolved` nunca aparece** en `info`, y
+   `busctl --system tree org.bluez` muestra sólo el nodo
+   `/org/bluez/hci0/dev_AC_C2_01_7C_88_5E`, **sin hijos `/serviceXXXX`**. O sea:
+   hay link, no hay árbol GATT.
+5. Por eso `bleak` muere con `TimeoutError` dentro de `connect()`, tres veces
+   seguidas con 30 s de timeout: su backend BlueZ espera `ServicesResolved`.
+   `BleakScanner.find_device_by_address()` sí las encuentra — el que falla es el
+   connect, no el descubrimiento. También falló `list-attributes` de
+   `bluetoothctl menu gatt`, que devuelve vacío por la misma razón.
+
+`bleak` quedó instalado en `setup/bin/rgb/.venv` (no versionado, con
+`python3-venv` que hubo que instalar). Los paquetes del protocolo
+—`7e 00 05 03 RR GG BB 00 ef` para color, `7e 00 04 f0 …` para on/off— **siguen sin
+confirmar**: nunca se llegó a escribir uno.
+
+**Hipótesis a probar primero, no probada:** que el emparejamiento es justamente lo
+que traba a estas ELK-BLEDOM, que son BLE abierto y no necesitan parear. Se probaría
+con `bluetoothctl remove AC:C2:01:7C:88:5E` y conectando en crudo. No se hizo porque
+**destruye el pairing actual** y era mejor dejarlo decidido a mano. Segunda vía si
+esa falla: `btmon` en paralelo para ver si el link se cae antes del MTU exchange.

@@ -15,20 +15,12 @@ diagnóstico desde cero — pasó tres veces con el mismo bug.
 
 ## Dónde retomar
 
-**La prueba pendiente es iniciar sesión en Steam y abrir CS2.** Steam nativo está
-corriendo desde `~/Juegos/Steam` y quedó en la pantalla de login — eso lo hace la
-persona. Con la sesión iniciada, abrir CS2 con `journalctl -kf | grep amdgpu` en
-otra terminal. La primera partida tarda más: el shader cache se regenera.
+El siguiente frente de gaming son los **327 GB que quedaron del lado de Windows**
+(ver «Abierto»). Steam y CS2 ya están cerrados como tema: ver «Qué funciona».
 
-La causa del cuelgue del 31/08 ya no está: era el Mesa 25.2.2 del snap contra el
-26.0.8 del sistema, y ahora Steam es el `.deb` nativo, que usa el del sistema. Si
-aun así cuelga, la escalada está en `ESTADO-historial.md` (sesión del 31/08):
-`RADV_DEBUG=llvm`. Y para capturar en vez de colgar:
+Si alguna vez vuelve a colgar la GPU, la escalada está en `ESTADO-historial.md`
+(sesión del 31/08): `RADV_DEBUG=llvm`, y para capturar en vez de colgar
 `RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
-
-**No borrar el snap de Steam hasta que un juego abra.** Los 83 GB del snap siguen
-en `~/snap/steam/` y son la única copia de respaldo de la biblioteca. Cuando CS2
-arranque desde el nativo: `sudo snap remove steam` libera esos 83 GB del disco raíz.
 
 **Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **23 commits
 adelante de `origin`**. Está trabado por afuera del repo: esta máquina no tiene con
@@ -46,12 +38,26 @@ revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
 es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
 tres clics sobre el icono de la terminal.
 
-**El RGB es un frente pendiente, con el hardware ya identificado y verificado.**
-Objetivo: prender, apagar y cambiar el color de todo desde un solo lado. Placa MSI
-X670E (USB HID `0db0:0076`), GPU ASUS con Aura (SMBus, `/dev/i2c-*` ya existe) y
-dos tiras ELK-BLEDOM por BLE, ya emparejadas. Nada instalado todavía. El detalle
-—protocolo de las tiras, direcciones, diseño del módulo y la trampa del SMBus con
-la RAM— está en `ESTADO-historial.md`, «RGB — hardware identificado».
+**El RGB anda por OpenRGB; faltan las dos tiras BLE.** Objetivo: prender, apagar
+y cambiar el color de todo desde un solo lado. Hecho el 01/09: `openrgb` 0.9 de
+universe instalado, y **`setup/bin/rgb/rgbctl`** como CLI único —
+`rgbctl ff0000 | on | off | list`. Verificado con rc=0 sobre la GPU y la placa.
+
+OpenRGB ve cuatro dispositivos: `0` y `1` ENE DRAM (i2c-1, 0x71 y 0x73), `2`
+**ASUS TUF Radeon RX 6900 XT Gaming OC** (i2c-10, 0x67) y `3` **MSI X670E GAMING
+PLUS WIFI** (hidraw0, serie 7E1624102103). **La trampa del SMBus con la RAM no se
+cumplió**: la detección vio los dos módulos sin colgar el bus, así que no hizo
+falta `acpi_enforce_resources=lax`. Aun así `rgbctl` **no le escribe a la RAM**
+salvo con `--con-ram`: detectar es leer, y escribir es lo que cuelga. El ruido
+`[i2c_smbus_linux] Failed to read i2c device PCI device ID` es de los buses DDC de
+los monitores, no un error.
+
+Pendiente: **las dos tiras ELK-BLEDOM siguen sin manejarse** — BlueZ las conecta
+pero nunca resuelve sus servicios GATT, así que `bleak` no puede escribirles y los
+paquetes del protocolo siguen sin confirmar. El diagnóstico completo y la hipótesis
+a probar están en `ESTADO-historial.md`, «RGB — las tiras BLE no resuelven GATT».
+Falta también empaquetar todo como `setup/modules/80-rgb.sh` con su entrada en
+`install.sh`, `undo.sh` y `doctor.sh`, y el `QuickMenuToggle` en el hub.
 
 Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
 (ver «Abierto»).
@@ -64,12 +70,20 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Qué funciona, verificado
 
-- **Steam salió del snap y tiene carpeta propia.** El snap corría Mesa 25.2.2
-  contra el 26.0.8 del sistema, y ese RADV viejo colgó la GPU el 31/08. Ahora es
-  `steam-installer` de multiverse (el `.deb` de Valve), instalado entero en
-  **`~/Juegos/Steam`**, con `~/.steam/{steam,root}` y `~/.local/share/Steam`
-  apuntando ahí. Los 83 GB se copiaron con `rsync`, no se re-descargaron. Verificado
-  que el cliente arranca desde la ruta nueva; falta el login y abrir un juego.
+- **Steam salió del snap, y CS2 abre sin colgar la GPU.** El snap corría Mesa
+  25.2.2 contra el 26.0.8 del sistema, y ese RADV viejo colgó la GPU el 31/08.
+  Ahora es `steam-installer` de multiverse (el `.deb` de Valve), instalado entero
+  en **`~/Juegos/Steam`**, con `~/.steam/{steam,root}` y `~/.local/share/Steam`
+  apuntando ahí. Los 83 GB se copiaron con `rsync`, no se re-descargaron.
+  Verificado el 01/09: el cliente entra solo por `AutoLogin` (`Logged On` 00:19:54)
+  y **CS2 arranca** — `shadercache/730/radv_builtin_shaders` con 52 entradas, o sea
+  RADV compilando de verdad, y **165 s de `journalctl -kf` sin un solo evento de
+  `amdgpu`**, con 0 «gpu reset» en todo el boot.
+- **El snap de Steam se borró: 86 GB de vuelta.** Cumplida la condición de que un
+  juego abriera desde el nativo, `snap remove --purge steam` (el `--purge` evita
+  que snapd guarde un snapshot del mismo tamaño). `/` pasó de 171 GB usados a
+  **85 GB**, con 611 GB libres. Antes de borrar se comprobó que ningún symlink del
+  nativo apuntaba al snap: los tres van a `~/Juegos/Steam`.
 - **Windows se achicó y Linux ganó 462 GiB.** El NTFS pasó de 1162 a **700 GiB**
   (usa 498) con `ntfsresize` —cero reubicaciones— y la partición se recreó con
   `sgdisk` conservando sector de inicio, tipo y PARTUUID. Lo liberado es
@@ -96,16 +110,11 @@ bash setup/gshell.sh find macos-dock-root
 - **El repo se mudó a `~/Documentos/Proyectos/Configurador`** (31/08). Estaba en
   `~/Imágenes/Prep-Course`, que contradecía la regla de arranque del `CLAUDE.md`
   global. Verificado desde la ruta nueva: `doctor.sh` con 0 críticos y 0 errores de
-  gnome-shell, y `npm test` con 129 tests en 7 suites. Nada del kit tenía la ruta
-  vieja hardcodeada. Las cuatro memorias del proyecto se consolidaron en la key
-  `-home-son-Documentos-Proyectos-Configurador` — venían partidas en **dos** keys, y
-  las dos de la key `-home-son-Prep-Course` (`sudo-requiere-ventana-grafica`,
-  `setup-install-necesita-yes`) estaban huérfanas: no cargaban desde ninguna ruta.
-  Comprobado ya con una sesión abierta desde la ruta nueva: las cuatro cargan al
-  arrancar, y `doctor.sh` da 0 críticos y 0 errores de gnome-shell. En las dos keys
-  viejas quedaron **copias idénticas** de esas memorias (se copiaron, no se
-  movieron); son inertes porque esas rutas ya no existen, pero si alguna vez se
-  edita una memoria, la que vale es la de la key nueva.
+  gnome-shell, y `npm test` con 129 tests en 7 suites. Las cuatro memorias del
+  proyecto se consolidaron en la key `-home-son-Documentos-Proyectos-Configurador`
+  (venían partidas en dos, con dos huérfanas) y cargan al arrancar. En las keys
+  viejas quedaron copias inertes: si alguna vez se edita una memoria, la que vale
+  es la de la key nueva.
 - **PaperWM ya no tira la sesión al abrir Discord.** Era un SIGSEGV del shell al
   redimensionar una `MetaWindow` que mutter ya estaba desmanejando. Dos guards en
   `tiling.js`, en `setup/patches/paperwm-timeout-ventana-muerta.patch`. Cinco

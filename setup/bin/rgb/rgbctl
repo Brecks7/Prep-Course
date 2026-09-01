@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# rgbctl — prender, apagar y colorear todo el RGB de la máquina desde un solo lado.
+#
+# Hoy cubre lo que llega por OpenRGB: la placa MSI X670E (HID) y la GPU ASUS
+# (SMBus). Las dos tiras ELK-BLEDOM van por BLE y NO están cubiertas todavía;
+# el porqué está en ESTADO.md.
+#
+# La RAM se excluye a propósito: escribirle por SMBus puede colgar el bus, y en
+# esta máquina el RGB de la RAM no es parte del objetivo. `--con-ram` lo fuerza.
+set -euo pipefail
+
+placa_y_gpu=(2 3)   # ids de `openrgb --list-devices`; ver ESTADO.md
+ram=(0 1)
+
+uso() {
+  cat <<EOF
+uso: rgbctl <color HEX | on | off | list> [--con-ram]
+
+  rgbctl ff0000        todo en rojo
+  rgbctl off           apagar
+  rgbctl on            prender en blanco
+  rgbctl list          qué dispositivos ve OpenRGB
+  --con-ram            incluir los módulos de RAM (puede colgar el bus SMBus)
+EOF
+}
+
+command -v openrgb >/dev/null || { echo "falta openrgb: sudo apt install openrgb" >&2; exit 1; }
+
+[[ $# -ge 1 ]] || { uso; exit 1; }
+
+accion=$1; shift
+destinos=("${placa_y_gpu[@]}")
+[[ "${1:-}" == "--con-ram" ]] && destinos+=("${ram[@]}")
+
+case "$accion" in
+  list) openrgb --list-devices 2>/dev/null | grep -E "^[0-9]+:"; exit 0 ;;
+  -h|--help) uso; exit 0 ;;
+  off)  modo=(--mode off) ;;
+  on)   modo=(--mode direct --color ffffff) ;;
+  *)
+    [[ "$accion" =~ ^[0-9a-fA-F]{6}$ ]] || { echo "color inválido: $accion (se espera RRGGBB)" >&2; exit 1; }
+    modo=(--mode direct --color "$accion")
+    ;;
+esac
+
+for d in "${destinos[@]}"; do
+  # El ruido "[i2c_smbus_linux] Failed to read i2c device PCI device ID" es de los
+  # buses DDC de los monitores, no un error: se descarta.
+  openrgb --device "$d" "${modo[@]}" 2>/dev/null >/dev/null \
+    && echo "  ok  dispositivo $d" \
+    || echo "  FALLÓ dispositivo $d" >&2
+done

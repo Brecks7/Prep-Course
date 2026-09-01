@@ -6,3 +6,5 @@ package-lock.json
 _dist
 _cache
 /_src/localStyles
+# venv del CLI de RGB (se recrea con setup/modules/80-rgb.sh)
+setup/bin/rgb/.venv/
