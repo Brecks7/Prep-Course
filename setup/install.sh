@@ -23,7 +23,7 @@ done
 
 # --- Selección de módulos ----------------------------------------------------
 declare -A EJECUTAR=(
-    [base]=0 [limpieza]=0 [gpu]=0 [perf]=0 [desnap]=0 [theme]=0 [extensions]=0 [dev]=0 [claude]=0
+    [base]=0 [limpieza]=0 [gpu]=0 [perf]=0 [desnap]=0 [theme]=0 [extensions]=0 [dev]=0 [claude]=0 [rgb]=0
 )
 
 uso() {
@@ -48,6 +48,7 @@ Módulos:
   --extensions    Dash to Dock, Blur my Shell y efectos
   --dev           Node (nvm), VS Code, herramientas de terminal, git
   --claude        Claude Code + CLAUDE.md
+  --rgb           OpenRGB y rgbctl: un solo comando para el RGB de la máquina
 
 Ejemplos:
   bash setup/install.sh --dry-run --all --aggressive
@@ -79,6 +80,7 @@ while [[ $# -gt 0 ]]; do
         --extensions)  EJECUTAR[extensions]=1 ;;
         --dev)         EJECUTAR[dev]=1 ;;
         --claude)      EJECUTAR[claude]=1 ;;
+        --rgb)         EJECUTAR[rgb]=1 ;;
         -h|--help)     uso; exit 0 ;;
         *)             log_err "Opción desconocida: $1"; uso; exit 1 ;;
     esac
@@ -123,7 +125,7 @@ fi
 # contraseña ahí deja una ventana colgada esperando a alguien que quizá no está
 # frente a la pantalla.
 NECESITA_SUDO=0
-for _m in base limpieza gpu perf desnap dev; do
+for _m in base limpieza gpu perf desnap dev rgb; do
     [[ "${EJECUTAR[$_m]:-0}" == "1" ]] && NECESITA_SUDO=1
 done
 # El camino WhiteSur de --theme sí usa sudo (tweaks.sh -g para GDM); el camino
@@ -160,6 +162,7 @@ ejecutar_modulo theme      modulo_theme
 ejecutar_modulo extensions modulo_extensions
 ejecutar_modulo dev        modulo_dev
 ejecutar_modulo claude     modulo_claude
+ejecutar_modulo rgb        modulo_rgb
 
 # --- Resumen -----------------------------------------------------------------
 printf '\n%s\n' "──────────────────────────────────────────"

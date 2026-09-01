@@ -377,6 +377,40 @@ else
     res "install.sh: nunca corrió"
 fi
 
+# --- RGB -------------------------------------------------------------------
+titulo "RGB"
+
+if hay openrgb; then
+    # Enumerar los buses SMBus tarda unos segundos; sin timeout esto cuelga el
+    # diagnóstico entero, que se supone que es rápido y sólo lee.
+    N_RGB=$(timeout 30 openrgb --list-devices 2>/dev/null | grep -cE '^[0-9]+:')
+    if [[ "${N_RGB:-0}" -gt 0 ]]; then
+        bien "OpenRGB ve $N_RGB dispositivo(s)"
+        timeout 30 openrgb --list-devices 2>/dev/null | grep -E '^[0-9]+:' \
+            | while read -r linea; do dato "$linea"; done
+        res "RGB: $N_RGB dispositivos"
+    else
+        avis "OpenRGB instalado pero no ve ningún dispositivo"
+        res "RGB: sin dispositivos"
+    fi
+
+    if systemctl --user is-enabled rgb-restore.service >/dev/null 2>&1; then
+        ULTIMO="$(cat "${XDG_STATE_HOME:-$HOME/.local/state}/rgbctl/ultimo" 2>/dev/null)"
+        bien "El RGB vuelve solo al iniciar sesión${ULTIMO:+ (último: $ULTIMO)}"
+    else
+        dato "rgb-restore.service no está habilitado — el RGB no persiste al reiniciar"
+    fi
+else
+    dato "OpenRGB no instalado — se pone con: bash setup/install.sh --yes --rgb"
+    res "RGB: sin OpenRGB"
+fi
+
+# Las dos tiras BLE: se conectan pero su protocolo no se identificó (ver ESTADO.md).
+if hay bluetoothctl; then
+    N_TIRAS=$(bluetoothctl devices 2>/dev/null | grep -ci "LEDDMX")
+    [[ "${N_TIRAS:-0}" -gt 0 ]] && dato "$N_TIRAS tira(s) BLE conocidas — todavía sin protocolo, ver ESTADO.md"
+fi
+
 # --- Errores del shell -----------------------------------------------------
 titulo "Errores recientes de GNOME Shell"
 

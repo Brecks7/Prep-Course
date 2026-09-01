@@ -6,6 +6,7 @@ import {GhostGuard} from './ghostGuard.js';
 import {MenuBlur} from './menuBlur.js';
 import {PanelDeclutter} from './panelDeclutter.js';
 import {PanelStyle} from './panelStyle.js';
+import {RgbControl} from './rgbControl.js';
 import {WorkspaceToggle} from './workspaceToggle.js';
 
 export default class MacTahoeTweaks extends Extension {
@@ -33,6 +34,10 @@ export default class MacTahoeTweaks extends Extension {
         this._blurControl = new BlurControl(this._settings);
         this._blurControl.enable();
 
+        // El RGB de la máquina (RAM, GPU y placa), también en el hub.
+        this._rgbControl = new RgbControl(this._settings);
+        this._rgbControl.enable();
+
         // Va último: colapsa la barra a un solo botón, y para eso necesita que
         // los indicadores que se mudan al hub ya estén puestos.
         this._panelDeclutter = new PanelDeclutter(this.path);
@@ -42,6 +47,9 @@ export default class MacTahoeTweaks extends Extension {
     disable() {
         this._panelDeclutter?.disable();
         this._panelDeclutter = null;
+
+        this._rgbControl?.disable();
+        this._rgbControl = null;
 
         this._blurControl?.disable();
         this._blurControl = null;

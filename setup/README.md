@@ -59,8 +59,38 @@ bash setup/install.sh --dev                  # solo Node, VS Code y terminal
 | `--extensions` | MacOS Dock, Blur my Shell, `mactahoe-tweaks`, bandeja y atajos |
 | `--dev` | Node vía nvm, VS Code, `rg`/`fzf`/`bat`/`btop`/`eza`/`zoxide`, git |
 | `--claude` | Claude Code CLI y un `CLAUDE.md` para el repo |
+| `--rgb` | OpenRGB y `rgbctl`: un solo comando para el RGB de RAM, GPU y placa |
 
 `*` requiere `--aggressive`.
+
+### `--rgb`: el RGB desde un solo lado
+
+Instala OpenRGB, enlaza `rgbctl` en `~/.local/bin` y habilita un servicio de
+usuario que repone el último color al iniciar sesión.
+
+```bash
+rgbctl ff0000     # RAM, GPU y headers de la placa en rojo
+rgbctl on | off   # prender en blanco / apagar
+rgbctl list       # qué dispositivos ve OpenRGB
+rgbctl status     # qué se aplicó por última vez
+rgbctl --sin-ram  # saltear los módulos de RAM
+```
+
+Dos cosas que conviene saber antes de tocarlo:
+
+- **Los dispositivos se resuelven por nombre, no por índice.** Los números que
+  imprime `openrgb --list-devices` cambian si se enchufa o saca hardware, así que
+  fijarlos en el script era una bomba de tiempo.
+- **Escribir a la RAM por SMBus es la única parte con riesgo real**: puede colgar el
+  bus, y de eso se sale reiniciando. En esta máquina se probó módulo por módulo y
+  aguantó, pero por eso existe `--sin-ram`. Si alguna vez el bus se cuelga, el
+  fallback es `acpi_enforce_resources=lax` en GRUB.
+- El ruido `[i2c_smbus_linux] Failed to read i2c device PCI device ID` es de los
+  buses DDC de los monitores. No es un error y `rgbctl` lo descarta.
+
+Las **tiras BLE no están cubiertas**: se conectan y aceptan escrituras, pero su
+protocolo no se identificó. El estado y los nueve formatos ya descartados están en
+`ESTADO-historial.md`.
 
 ## Sobre `--theme` y tu configuración actual
 

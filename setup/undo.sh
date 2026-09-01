@@ -126,6 +126,24 @@ if [[ -f "$OBJETIVO/acciones.txt" ]]; then
                     && log_ok "desactivada: $ext" \
                     || log_warn "no se pudo desactivar: $ext"
                 ;;
+            "enlace creado: "*)
+                enlace="${accion#enlace creado: }"
+                [[ -L "$enlace" ]] && rm -f "$enlace" \
+                    && log_ok "eliminado el enlace: $enlace" \
+                    || log_warn "no se pudo eliminar el enlace: $enlace"
+                ;;
+            "servicio de usuario creado: "*)
+                # Lo creó el kit de cero, así que se saca entero. El color que
+                # hubiera quedado aplicado no se toca: apagarlo es otro gesto.
+                unidad="${accion#servicio de usuario creado: }"
+                systemctl --user disable --now "$unidad" >/dev/null 2>&1 || true
+                if rm -f "$HOME/.config/systemd/user/$unidad"; then
+                    systemctl --user daemon-reload 2>/dev/null
+                    log_ok "eliminado: $unidad"
+                else
+                    log_warn "no se pudo eliminar: $unidad"
+                fi
+                ;;
             "extensión local instalada: "*)
                 # Esta sí se borra: no vino de extensions.gnome.org, la copió el
                 # kit desde el repo, así que nadie más la va a echar de menos.

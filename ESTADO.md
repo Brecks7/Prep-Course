@@ -38,26 +38,25 @@ revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
 es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
 tres clics sobre el icono de la terminal.
 
-**El RGB anda por OpenRGB; faltan las dos tiras BLE.** Objetivo: prender, apagar
-y cambiar el color de todo desde un solo lado. Hecho el 01/09: `openrgb` 0.9 de
-universe instalado, y **`setup/bin/rgb/rgbctl`** como CLI único —
-`rgbctl ff0000 | on | off | list`. Verificado con rc=0 sobre la GPU y la placa.
+**El RGB quedó unificado salvo las tiras.** `rgbctl` (en el PATH por symlink) es
+el único lado: aplica color, `on` y `off` a los **dos módulos de RAM**, la **GPU** y
+los headers de la placa, y guarda lo último para que `rgb-restore.service` lo
+reponga al iniciar sesión. Verificado a ojo el 01/09: la GPU en azul y **la RAM
+dejó el arcoíris**. Falta que confirmes el rojo de la última corrida.
 
-OpenRGB ve cuatro dispositivos: `0` y `1` ENE DRAM (i2c-1, 0x71 y 0x73), `2`
-**ASUS TUF Radeon RX 6900 XT Gaming OC** (i2c-10, 0x67) y `3` **MSI X670E GAMING
-PLUS WIFI** (hidraw0, serie 7E1624102103). **La trampa del SMBus con la RAM no se
-cumplió**: la detección vio los dos módulos sin colgar el bus, así que no hizo
-falta `acpi_enforce_resources=lax`. Aun así `rgbctl` **no le escribe a la RAM**
-salvo con `--con-ram`: detectar es leer, y escribir es lo que cuelga. El ruido
-`[i2c_smbus_linux] Failed to read i2c device PCI device ID` es de los buses DDC de
-los monitores, no un error.
+**Lo que no salió son las dos tiras BLE, y el bloqueo ya no es la conexión.** Borrar
+el bond las destrabó: ahora conectan, resuelven GATT y **aceptan las escrituras con
+ACK**. Lo que falta es el **protocolo**: se probaron **nueve formatos** conocidos y
+ninguno las movió. El camino que cierra el tema es capturar los bytes que manda la
+app del celular («LED Lamp», Android, registro HCI + informe de errores) — detalle
+en `ESTADO-historial.md`, «RGB — las tiras BLE no resuelven GATT». Dato del usuario
+para cuando se decodifiquen: la app tiene el orden de color en **GRB**, no RGB.
 
-Pendiente: **las dos tiras ELK-BLEDOM siguen sin manejarse** — BlueZ las conecta
-pero nunca resuelve sus servicios GATT, así que `bleak` no puede escribirles y los
-paquetes del protocolo siguen sin confirmar. El diagnóstico completo y la hipótesis
-a probar están en `ESTADO-historial.md`, «RGB — las tiras BLE no resuelven GATT».
-Falta también empaquetar todo como `setup/modules/80-rgb.sh` con su entrada en
-`install.sh`, `undo.sh` y `doctor.sh`, y el `QuickMenuToggle` en el hub.
+**El botón del hub («Luces») pide un login para aparecer.** `rgbControl.js` está
+escrito, desplegado y con su schema compilado, pero GNOME no recarga la extensión
+en vivo sin unsafe mode. Al volver a entrar: que aparezca el toggle, que prenda y
+apague, y **que el escritorio no se congele** al usarlo (las llamadas son
+asíncronas y serializadas justamente por eso).
 
 Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
 (ver «Abierto»).
@@ -70,6 +69,24 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Qué funciona, verificado
 
+- **El arranque te deja elegir el sistema.** No era GRUB —ya estaba bien— sino el
+  firmware: `BootOrder` tenía a Windows primero, así que GRUB nunca corría. Ahora
+  `0002,0000` (Ubuntu primero) con `efibootmgr`, `GRUB_TIMEOUT` en 10 y el menú
+  regenerado: quedan `Ubuntu`, `Windows Boot Manager (on /dev/nvme0n1p1)` y
+  `UEFI Firmware Settings` —esta última es el atajo para ir a tocar el SMT—.
+  Respaldos del `BootOrder` y del `/etc/default/grub` previos en
+  `~/.setup-ubuntu-backups/`. Se revierte con `sudo efibootmgr -o 0000,0002`.
+- **El RGB se maneja desde un solo lado.** `setup/bin/rgb/rgbctl`, enlazado en
+  `~/.local/bin`: `rgbctl ff0000 | on | off | list | status | restore`. Resuelve los
+  dispositivos **por nombre** y no por índice fijo, así que no se rompe si cambia el
+  orden. **La trampa del SMBus con la RAM no se cumplió**: se le escribió a los dos
+  módulos de a uno, y el bus siguió contestando los 4 dispositivos con 0 mensajes de
+  `i2c` en el kernel. Empaquetado en `setup/modules/80-rgb.sh` con su `--rgb` en
+  `install.sh`, su reverso en `undo.sh` y su chequeo en `doctor.sh` (probado: reporta
+  los 4 dispositivos y el último color).
+- **La tableta XP-Pen Deco 01 no necesita nada.** El driver `hid-uclogic` viene en
+  el kernel 7.0 y declara `256C:006D` y `256C:006E`, que son el Deco 01 y su V2.
+  DIGImend ya no hace falta. Queda probar lápiz, presión y botones al enchufarla.
 - **Steam salió del snap, y CS2 abre sin colgar la GPU.** El snap corría Mesa
   25.2.2 contra el 26.0.8 del sistema, y ese RADV viejo colgó la GPU el 31/08.
   Ahora es `steam-installer` de multiverse (el `.deb` de Valve), instalado entero

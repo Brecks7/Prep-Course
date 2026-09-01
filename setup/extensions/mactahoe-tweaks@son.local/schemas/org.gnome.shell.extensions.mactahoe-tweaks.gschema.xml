@@ -65,5 +65,24 @@
       <summary>Brillo del desenfoque de la barra superior</summary>
     </key>
 
+    <key name="toggle-rgb" type="as">
+      <default><![CDATA[['<Super>l']]]></default>
+      <summary>Atajo para prender y apagar las luces RGB</summary>
+    </key>
+
+    <key name="rgb-color" type="s">
+      <default>'ffffff'</default>
+      <summary>Último color aplicado al RGB, en RRGGBB</summary>
+      <description>
+        Lo que dibuja el botón del hub. La verdad de lo último que se aplicó de
+        verdad la tiene `rgbctl status`; esta key es el estado de la interfaz.
+      </description>
+    </key>
+
+    <key name="rgb-encendido" type="b">
+      <default>true</default>
+      <summary>Si las luces RGB están encendidas</summary>
+    </key>
+
   </schema>
 </schemalist>

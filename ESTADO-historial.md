@@ -946,3 +946,58 @@ que traba a estas ELK-BLEDOM, que son BLE abierto y no necesitan parear. Se prob
 con `bluetoothctl remove AC:C2:01:7C:88:5E` y conectando en crudo. No se hizo porque
 **destruye el pairing actual** y era mejor dejarlo decidido a mano. Segunda vía si
 esa falla: `btmon` en paralelo para ver si el link se cae antes del MTU exchange.
+
+
+## RGB — el bond era el problema, el protocolo sigue sin salir (01/09/2026)
+
+Continúa la entrada anterior. **La hipótesis del bond era correcta.**
+
+`bluetoothctl remove` sobre las dos tiras, y conectando **sin parear**, la
+`AC:C2:01:DC:81:5E` resolvió el árbol GATT de una:
+
+```
+servicio 0000ffe0-0000-1000-8000-00805f9b34fb
+   char 0000ffe1-…  props=['read', 'write-without-response', 'write', 'notify']
+```
+
+O sea que el bloqueo era BlueZ intentando cifrar un link «just works», no la tira.
+(La `7C:88:5E` necesitó un segundo `remove`: el primero dijo «removed» pero `info`
+seguía mostrándola `Bonded: yes` por caché.)
+
+**Pero las tiras no cambian de color.** Lo importante es que *no es que no lleguen*:
+con `write_gatt_char(..., response=True)` el servidor **ACKea las tres familias**, y
+`start_notify` se activa sin error. Los bytes entran; la tira no los reconoce.
+
+Formatos probados y descartados, todos contra `ffe1`, confirmado a ojo por el
+usuario:
+
+| # | Familia | Paquete |
+|---|---|---|
+| 1 | ELK-BLEDOM | `7e 00 05 03 RR GG BB 00 ef` |
+| 2 | Triones / Zengge | `56 RR GG BB 00 f0 aa` |
+| 3 | LEDBLE | `7e 07 05 03 RR GG BB 00 ef` |
+| 4 | Lotus Lantern | `7b RR GG BB 00 00 00 bf` |
+| 5 | genérico `aa..55` | `aa RR GG BB 55` |
+| 6 | SP110E | `38 RR GG BB 83` |
+| 7 | Zengge corto | `56 RR GG BB bb` |
+| 8 | iDealLED | `a0 RR GG BB` |
+| 9 | MohuanLED | `69 96 RR GG BB` |
+
+Un `read` de `ffe1` devuelve `GATT Protocol Error 0x80` (application-specific), y
+`notify` no entrega nada: la tira no cuenta su estado, así que **no se puede deducir
+el formato leyéndola**.
+
+**Ojo con una idea que no funciona:** `btmon` **no sirve** para capturar lo que manda
+la app del celular. Captura el tráfico del adaptador de esta PC, no el enlace entre
+el teléfono y la tira; para eso haría falta un sniffer BLE aparte.
+
+**El camino que queda, y es determinista:** el registro HCI de Android. Opciones de
+desarrollador → «Habilitar registro de Bluetooth HCI» → apagar y prender el
+Bluetooth → usar la app *LED Lamp* haciendo rojo / verde / azul / apagar-prender →
+Opciones de desarrollador → «Informe de errores», que trae el `btsnoop_hci.log`
+adentro del zip. Ahí están los bytes exactos. El usuario tiene iPhone (que no permite
+sacar ese log sin una Mac) pero consigue un Android prestado.
+
+**Dato del usuario que va a importar al decodificar:** en la configuración de la app,
+el orden de color está en **GRB**, no RGB. Así que en los paquetes capturados el
+primer byte de color es el verde.
