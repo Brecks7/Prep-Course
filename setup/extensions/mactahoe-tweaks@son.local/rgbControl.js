@@ -1,8 +1,10 @@
 // El RGB de la máquina, en el hub.
 //
 // El objetivo era prender, apagar y cambiar el color de todo desde un solo lado.
-// El "solo lado" es `rgbctl`, que habla con OpenRGB y aplica el color a los dos
-// módulos de RAM, la GPU y los headers de la placa. Acá se le pone el botón.
+// El "solo lado" es `rgbctl`, que aplica el color a los dos módulos de RAM, la
+// GPU y los headers de la placa (por OpenRGB) y a las dos tiras BLE (por BlueZ).
+// Acá se le pone el botón. Las tiras no agregan latencia medible: la escritura
+// BLE tarda milisegundos y lo lento sigue siendo OpenRGB enumerando el SMBus.
 //
 // Dos cosas que no son negociables en este archivo:
 //
@@ -80,7 +82,7 @@ export const RgbToggle = GObject.registerClass(
             this._settings.bind(KEY_ENCENDIDO, this, 'checked',
                 Gio.SettingsBindFlags.DEFAULT);
 
-            this.menu.setHeader(ICONO_ON, 'Luces', 'RAM, placa de video y placa madre');
+            this.menu.setHeader(ICONO_ON, 'Luces', 'RAM, GPU, placa madre y tiras');
 
             this._items = [];
             for (const [nombre, hex] of COLORES) {

@@ -1,4 +1,4 @@
-# Estado de la máquina — 31 de agosto de 2026
+# Estado de la máquina — 1 de septiembre de 2026
 
 GNOME 50 sobre Ubuntu 26.04, Wayland. El `CLAUDE.md` dice **qué es** el proyecto;
 acá va **en qué anda** la máquina hoy. El relato largo de cada sesión —síntomas,
@@ -38,26 +38,9 @@ revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
 es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
 tres clics sobre el icono de la terminal.
 
-**El RGB quedó unificado salvo las tiras.** `rgbctl` (en el PATH por symlink) es
-el único lado: aplica color, `on` y `off` a los **dos módulos de RAM**, la **GPU** y
-los headers de la placa, y guarda lo último para que `rgb-restore.service` lo
-reponga al iniciar sesión. Verificado a ojo el 01/09 y **en dos colores distintos**:
-la GPU en azul, y **la RAM dejó el arcoíris** — primero azul, después rojo. Ese
-frente está cerrado.
-
-**Lo que no salió son las dos tiras BLE, y el bloqueo ya no es la conexión.** Borrar
-el bond las destrabó: ahora conectan, resuelven GATT y **aceptan las escrituras con
-ACK**. Lo que falta es el **protocolo**: se probaron **nueve formatos** conocidos y
-ninguno las movió. El camino que cierra el tema es capturar los bytes que manda la
-app del celular («LED Lamp», Android, registro HCI + informe de errores) — detalle
-en `ESTADO-historial.md`, «RGB — las tiras BLE no resuelven GATT». Dato del usuario
-para cuando se decodifiquen: la app tiene el orden de color en **GRB**, no RGB.
-
-**El botón del hub («Luces») pide un login para aparecer.** `rgbControl.js` está
-escrito, desplegado y con su schema compilado, pero GNOME no recarga la extensión
-en vivo sin unsafe mode. Al volver a entrar: que aparezca el toggle, que prenda y
-apague, y **que el escritorio no se congele** al usarlo (las llamadas son
-asíncronas y serializadas justamente por eso).
+**El RGB está cerrado entero, tiras incluidas** — ver «Qué funciona». Lo único que
+falta es reiniciar y confirmar que `rgb-restore.service` las repone también con la
+caché de BlueZ fría (ver «Abierto»).
 
 Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
 (ver «Abierto»).
@@ -77,14 +60,28 @@ bash setup/gshell.sh find macos-dock-root
   `UEFI Firmware Settings` —esta última es el atajo para ir a tocar el SMT—.
   Respaldos del `BootOrder` y del `/etc/default/grub` previos en
   `~/.setup-ubuntu-backups/`. Se revierte con `sudo efibootmgr -o 0000,0002`.
-- **El RGB se maneja desde un solo lado.** `setup/bin/rgb/rgbctl`, enlazado en
-  `~/.local/bin`: `rgbctl ff0000 | on | off | list | status | restore`. Resuelve los
-  dispositivos **por nombre** y no por índice fijo, así que no se rompe si cambia el
-  orden. **La trampa del SMBus con la RAM no se cumplió**: se le escribió a los dos
-  módulos de a uno, y el bus siguió contestando los 4 dispositivos con 0 mensajes de
-  `i2c` en el kernel. Empaquetado en `setup/modules/80-rgb.sh` con su `--rgb` en
-  `install.sh`, su reverso en `undo.sh` y su chequeo en `doctor.sh` (probado: reporta
-  los 4 dispositivos y el último color).
+- **El RGB se maneja desde un solo lado, tiras BLE incluidas.**
+  `setup/bin/rgb/rgbctl`, enlazado en `~/.local/bin`:
+  `rgbctl ff0000 | on | off | list | status | restore`, más `--sin-ram` y
+  `--sin-tiras`. Habla dos mundos: **OpenRGB** (dos módulos de RAM, GPU, headers de
+  la placa) y **BlueZ** (las dos tiras `LEDDMX-03-*`). Todo se resuelve **por
+  nombre/UUID** y no por índice ni por handle fijo, así que no se rompe si cambia el
+  orden ni entre arranques. **La trampa del SMBus con la RAM no se cumplió**: se le
+  escribió a los dos módulos de a uno, y el bus siguió contestando los 4
+  dispositivos con 0 mensajes de `i2c` en el kernel. Empaquetado en
+  `setup/modules/80-rgb.sh` con su `--rgb` en `install.sh`, su reverso en `undo.sh`
+  y su chequeo en `doctor.sh` (probado: 4 dispositivos, 2 tiras conectadas y
+  trusted, último color, 0 críticos).
+- **Las dos tiras BLE responden.** Protocolo propio, familia `7b…bf` sobre la
+  característica `0000ffe1`, **write sin respuesta y con pausa entre tramas**; color
+  en **RGB directo**, no GRB. Ni handshake ni CCCD: lo que domina el snoop del
+  celular es ruido. Las tramas exactas están en `rgbctl` y el porqué en
+  `ESTADO-historial.md`, «RGB — las tiras BLE, resueltas». Verificado a ojo el 01/09
+  en cinco colores y apagado, en las dos.
+- **El botón «Luces» del hub prende, apaga y no congela el escritorio.** Verificado
+  el 01/09: el toggle está en Quick Settings (medido en píxeles, 196×64 en
+  1666,432), el ciclo arrastra GPU, las dos RAM y las dos tiras en ese orden, y
+  durante los ~17 s que tarda `rgbctl` el shell contesta Eval en **10 ms**.
 - **La tableta XP-Pen Deco 01 no necesita nada.** El driver `hid-uclogic` viene en
   el kernel 7.0 y declara `256C:006D` y `256C:006E`, que son el Deco 01 y su V2.
   DIGImend ya no hace falta. Queda probar lápiz, presión y botones al enchufarla.
@@ -169,6 +166,20 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Abierto
 
+- **Falta reiniciar y confirmar que `rgb-restore.service` repone las tiras.** El
+  servicio ya las repone con la sesión caliente (probado: exit 0, las dos tiras
+  entre los `ok`), y el caso del **Bluetooth *soft blocked*** se simuló bloqueándolo
+  a mano: `rgbctl` lo destraba solo y termina en 20 s en vez de 17. Lo que **no** se
+  pudo probar es el arranque de verdad, con la caché de BlueZ fría: ahí `rgbctl`
+  tiene que escanear 12 s antes de conectar, y el `sleep 5` del servicio puede
+  quedar corto. Se las dejó `trusted` para que reconecten solas.
+- **El subtítulo del toggle «Luces» miente si se usó `rgbctl` desde la terminal.**
+  El comentario de cabecera de `rgbControl.js` promete que la gsetting y
+  `rgbctl status` se sincronizan al abrir el menú, pero `_sync()` sólo lee la
+  gsetting. Se ve al aplicar magenta por CLI y encontrar el botón diciendo «Azul».
+  Cosmético: el color aplicado es el correcto, lo que está desfasado es la etiqueta.
+- **Brillo y velocidad de las tiras siguen sin identificar.** El análogo `7b` no se
+  buscó; el camino es volver al `btsnoop_hci.log` del bugreport.
 - **El SMT del 9800X3D está apagado en la BIOS: 8 hilos en vez de 16.**
   `/sys/devices/system/cpu/smt/control` dice `notsupported` y `lscpu -e` da un core
   por CPU — el firmware directamente esconde los hermanos. No fue decisión del

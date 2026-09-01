@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # rgbctl — prender, apagar y colorear el RGB de la máquina desde un solo lado.
 #
-# Cubre lo que llega por OpenRGB: los dos módulos de RAM (ENE DRAM por SMBus), la
-# GPU ASUS (Aura, SMBus) y los headers de la placa MSI (Mystic Light por HID).
-#
-# Las dos tiras BLE NO están cubiertas todavía: se conectan y aceptan escrituras,
-# pero su protocolo sigue sin identificarse. El estado está en ESTADO.md.
+# Cubre dos mundos:
+#   · Lo que llega por OpenRGB: los dos módulos de RAM (ENE DRAM por SMBus), la
+#     GPU ASUS (Aura, SMBus) y los headers de la placa MSI (Mystic Light por HID).
+#   · Las dos tiras BLE «LEDDMX-03-*», por BlueZ. Protocolo propio, familia 7b…bf,
+#     escrito sin respuesta sobre la característica 0000ffe1 (ver ESTADO.md).
 #
 # El color aplicado se guarda para que rgb-restore.service lo repita al entrar a
 # la sesión, que es lo que hace que sobreviva a un reinicio.
@@ -17,26 +17,33 @@ PATRON_RAM='ENE DRAM'
 PATRON_GPU='Radeon|ASUS|AMD'
 PATRON_MB='MSI|Mystic|Gaming Plus'
 
+# Las tiras BLE. Se buscan por nombre anunciado y su característica por UUID: los
+# handles ATT y los paths de BlueZ (serviceNNNN/charNNNN) no son estables entre
+# stacks ni entre arranques.
+PATRON_TIRAS='LEDDMX'
+UUID_TIRA='0000ffe1-0000-1000-8000-00805f9b34fb'
+
 ESTADO_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/rgbctl"
 ESTADO="$ESTADO_DIR/ultimo"
 
 uso() {
   cat <<'EOF'
-uso: rgbctl <RRGGBB | on | off | list | status | restore> [--sin-ram]
+uso: rgbctl <RRGGBB | on | off | list | status | restore> [--sin-ram] [--sin-tiras]
 
   rgbctl ff0000      todo en rojo
   rgbctl off         apagar
   rgbctl on          prender en blanco
-  rgbctl list        qué dispositivos ve OpenRGB
+  rgbctl list        qué dispositivos hay: OpenRGB y tiras BLE
   rgbctl status      qué se aplicó por última vez
   rgbctl restore     volver a aplicar lo último (lo usa el servicio de arranque)
   --sin-ram          saltear los módulos de RAM
-
-Las tiras BLE todavía no están soportadas: ver ESTADO.md.
+  --sin-tiras        saltear las tiras BLE (evita esperar al Bluetooth)
 EOF
 }
 
 command -v openrgb >/dev/null || { echo "falta openrgb: sudo apt install openrgb" >&2; exit 1; }
+
+# --- OpenRGB ---------------------------------------------------------------
 
 # Devuelve los índices de los dispositivos cuyo nombre matchea un patrón.
 indices_de() {
@@ -46,13 +53,119 @@ indices_de() {
     | cut -d: -f1
 }
 
+# --- Tiras BLE -------------------------------------------------------------
+
+# El Bluetooth de esta máquina arranca *soft blocked* por rfkill y hay que
+# destrabarlo antes de mirar nada. No hace falta sudo, y el firmware del MT7922
+# tarda un momento en levantar después. Sospecha: el fast startup de Windows.
+bluetooth_arriba() {
+  if rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; then
+    rfkill unblock bluetooth 2>/dev/null || return 1
+    local i
+    for i in {1..20}; do
+      [[ "$(busctl get-property org.bluez /org/bluez/hci0 org.bluez.Adapter1 Powered 2>/dev/null)" == "b true" ]] && return 0
+      sleep 0.5
+    done
+  fi
+  return 0
+}
+
+# MACs de las tiras que BlueZ conoce. Sin emparejar se caen de la caché, así que
+# si no aparece ninguna se escanea una vez y se vuelve a mirar.
+tiras_macs() {
+  local macs
+  bluetooth_arriba
+  macs="$(bluetoothctl devices 2>/dev/null | grep -i "$PATRON_TIRAS" | awk '{print $2}')"
+  if [[ -z "$macs" ]]; then
+    timeout 15 bluetoothctl --timeout 12 scan le >/dev/null 2>&1
+    macs="$(bluetoothctl devices 2>/dev/null | grep -i "$PATRON_TIRAS" | awk '{print $2}')"
+  fi
+  printf '%s\n' "$macs"
+}
+
+mac_a_path() { printf '/org/bluez/hci0/dev_%s\n' "${1//:/_}"; }
+
+conectada() {
+  [[ "$(busctl get-property org.bluez "$1" org.bluez.Device1 Connected 2>/dev/null)" == "b true" ]]
+}
+
+# Conectar y esperar a que BlueZ termine de resolver el GATT: sin eso los paths
+# de las características todavía no existen.
+tira_conectar() {
+  local mac=$1 dev; dev="$(mac_a_path "$mac")"
+  conectada "$dev" || timeout 20 bluetoothctl connect "$mac" >/dev/null 2>&1 || return 1
+  local i
+  for i in {1..40}; do
+    [[ "$(busctl get-property org.bluez "$dev" org.bluez.Device1 ServicesResolved 2>/dev/null)" == "b true" ]] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+# La característica de control, buscada por UUID debajo de ESTE device. Resolver
+# por UUID a secas (bluetoothctl select-attribute) engancha el device anterior:
+# una sesión entera se fue a la tira equivocada por eso.
+tira_char() {
+  local dev=$1 p
+  while read -r p; do
+    [[ "$p" == "$dev"/service*/char* && "$p" != */desc* ]] || continue
+    if [[ "$(busctl get-property org.bluez "$p" org.bluez.GattCharacteristic1 UUID 2>/dev/null)" == *"$UUID_TIRA"* ]]; then
+      printf '%s\n' "$p"; return 0
+    fi
+  done < <(busctl --list tree org.bluez 2>/dev/null)
+  return 1
+}
+
+# Una trama de 9 bytes, sin respuesta ("type command"): la tira ignora las
+# escrituras con respuesta.
+tira_escribir() {
+  local ch=$1; shift
+  busctl call org.bluez "$ch" org.bluez.GattCharacteristic1 WriteValue 'aya{sv}' \
+    "$#" "${@/#/0x}" 1 type s command >/dev/null 2>&1
+}
+
+# Aplica a una tira lo mismo que `modo` a OpenRGB. El color va precedido de un
+# encendido: si la tira venía apagada, sola la trama de color no la despierta.
+#
+# La pausa entre tramas NO es adorno. Sin respuesta no hay control de flujo: dos
+# escrituras pegadas caen en el mismo intervalo de conexión y la tira se come la
+# segunda. Medido: encendido+color sin pausa dejó una de las dos apagada.
+PAUSA_TRAMA=0.2
+
+tira_aplicar() {
+  local ch=$1 accion=$2
+  case "$accion" in
+    off) tira_escribir "$ch" 7b ff 04 00 ff ff ff ff bf ;;
+    on)  accion=ffffff ;&
+    *)   tira_escribir "$ch" 7b ff 04 01 ff ff ff ff bf || return 1
+         sleep "$PAUSA_TRAMA"
+         tira_escribir "$ch" 7b ff 07 "${accion:0:2}" "${accion:2:2}" "${accion:4:2}" 00 ff bf ;;
+  esac
+}
+
+# --- Argumentos ------------------------------------------------------------
+
 [[ $# -ge 1 ]] || { uso; exit 1; }
 accion=$1; shift
 sin_ram=0
-[[ "${1:-}" == "--sin-ram" ]] && sin_ram=1
+sin_tiras=0
+for arg in "$@"; do
+  case "$arg" in
+    --sin-ram)   sin_ram=1 ;;
+    --sin-tiras) sin_tiras=1 ;;
+    *) echo "opción desconocida: $arg" >&2; uso; exit 1 ;;
+  esac
+done
 
 case "$accion" in
-  list)   openrgb --list-devices 2>/dev/null | grep -E "^[0-9]+:"; exit 0 ;;
+  list)
+    openrgb --list-devices 2>/dev/null | grep -E "^[0-9]+:"
+    tiras_macs | while read -r m; do
+      [[ -n "$m" ]] || continue
+      if conectada "$(mac_a_path "$m")"; then estado=conectada; else estado=desconectada; fi
+      echo "BLE $m  tira ($estado)"
+    done
+    exit 0 ;;
   status) [[ -f "$ESTADO" ]] && cat "$ESTADO" || echo "(nunca se aplicó nada)"; exit 0 ;;
   -h|--help) uso; exit 0 ;;
   restore)
@@ -70,6 +183,10 @@ case "$accion" in
     ;;
 esac
 
+fallos=0
+
+# --- Aplicar: OpenRGB ------------------------------------------------------
+
 destinos=()
 mapfile -t -O "${#destinos[@]}" destinos < <(indices_de "$PATRON_GPU")
 mapfile -t -O "${#destinos[@]}" destinos < <(indices_de "$PATRON_MB")
@@ -79,7 +196,6 @@ fi
 
 [[ ${#destinos[@]} -gt 0 ]] || { echo "OpenRGB no ve ningún dispositivo conocido" >&2; exit 1; }
 
-fallos=0
 for d in "${destinos[@]}"; do
   # El ruido "[i2c_smbus_linux] Failed to read i2c device PCI device ID" es de los
   # buses DDC de los monitores, no un error: se descarta.
@@ -90,6 +206,29 @@ for d in "${destinos[@]}"; do
     fallos=$((fallos + 1))
   fi
 done
+
+# --- Aplicar: tiras BLE ----------------------------------------------------
+
+if [[ "$sin_tiras" == "0" ]] && command -v bluetoothctl >/dev/null; then
+  while read -r mac; do
+    [[ -n "$mac" ]] || continue
+    if ! tira_conectar "$mac"; then
+      echo "  FALLÓ tira $mac (no conecta)" >&2
+      fallos=$((fallos + 1)); continue
+    fi
+    ch="$(tira_char "$(mac_a_path "$mac")")"
+    if [[ -z "$ch" ]]; then
+      echo "  FALLÓ tira $mac (sin característica $UUID_TIRA)" >&2
+      fallos=$((fallos + 1)); continue
+    fi
+    if tira_aplicar "$ch" "$accion"; then
+      echo "  ok  tira $mac"
+    else
+      echo "  FALLÓ tira $mac (escritura rechazada)" >&2
+      fallos=$((fallos + 1))
+    fi
+  done < <(tiras_macs)
+fi
 
 if [[ "$fallos" == "0" ]]; then
   mkdir -p "$ESTADO_DIR" && printf '%s\n' "$accion" > "$ESTADO"

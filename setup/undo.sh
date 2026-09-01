@@ -144,6 +144,14 @@ if [[ -f "$OBJETIVO/acciones.txt" ]]; then
                     log_warn "no se pudo eliminar: $unidad"
                 fi
                 ;;
+            "tira BLE marcada como trusted: "*)
+                # Sólo se saca la confianza: la tira no se emparejó ni se tocó su
+                # configuración, así que no hay nada más que devolver.
+                mac="${accion#tira BLE marcada como trusted: }"
+                bluetoothctl untrust "$mac" >/dev/null 2>&1 \
+                    && log_ok "tira BLE sin confianza: $mac" \
+                    || log_warn "no se pudo quitar la confianza: $mac"
+                ;;
             "extensión local instalada: "*)
                 # Esta sí se borra: no vino de extensions.gnome.org, la copió el
                 # kit desde el repo, así que nadie más la va a echar de menos.

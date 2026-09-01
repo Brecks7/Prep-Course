@@ -1,4 +1,4 @@
-# Historial del escritorio — sesiones del 26 al 31 de agosto de 2026
+# Historial del escritorio — sesiones del 26 de agosto al 1 de septiembre de 2026
 
 Esto es el relato completo de cada sesión: síntomas, diagnósticos, callejones sin
 salida y evidencia. **No se lee al arrancar.** `ESTADO.md` dice en qué anda cada
@@ -916,6 +916,9 @@ Resumido en `ESTADO.md`; acá el detalle de cómo se hizo y qué se verificó.
 
 ## RGB — las tiras BLE no resuelven GATT (01/09/2026)
 
+> **Superado.** El desenlace está en «RGB — las tiras BLE, resueltas
+> (01/09/2026)», al final del archivo. Esto queda por los callejones sin salida.
+
 OpenRGB cubrió placa y GPU sin drama (ver `ESTADO.md`). Las dos tiras
 `LEDDMX-03-885E` (`AC:C2:01:7C:88:5E`) y `-815E` (`AC:C2:01:DC:81:5E`) no.
 
@@ -949,6 +952,9 @@ esa falla: `btmon` en paralelo para ver si el link se cae antes del MTU exchange
 
 
 ## RGB — el bond era el problema, el protocolo sigue sin salir (01/09/2026)
+
+> **Superado.** El desenlace está en «RGB — las tiras BLE, resueltas
+> (01/09/2026)», al final del archivo. Esto queda por los callejones sin salida.
 
 Continúa la entrada anterior. **La hipótesis del bond era correcta.**
 
@@ -1001,3 +1007,90 @@ sacar ese log sin una Mac) pero consigue un Android prestado.
 **Dato del usuario que va a importar al decodificar:** en la configuración de la app,
 el orden de color está en **GRB**, no RGB. Así que en los paquetes capturados el
 primer byte de color es el verde.
+
+---
+
+## RGB — las tiras BLE, resueltas (01/09/2026)
+
+Cierra los dos frentes que quedaban de `## RGB — el bond era el problema, el
+protocolo sigue sin salir`. **Las dos tiras responden desde Linux y el botón del
+hub está verificado.** Lo que sigue es lo que costó, para no repetirlo.
+
+### El protocolo no era el que dominaba la captura
+
+El `btsnoop_hci.log` del bugreport del celular tiene 302 escrituras al handle
+`0x001a`, y **159 de ellas son de la familia `7e…ef`** — la mayoría absoluta. Esa
+familia **no mueve las tiras**, probada sola y con handshake. Lo que sirve es la
+minoría: 33 tramas de la familia `7b…bf`.
+
+```
+7b ff 07 RR GG BB 00 ff bf     color
+7b ff 04 01 ff ff ff ff bf     encender
+7b ff 04 00 ff ff ff ff bf     apagar
+```
+
+- **RGB directo**, verificado escribiendo los tres canales de a uno. La nota de la
+  app sobre GRB no aplica al BLE.
+- **Write sin respuesta**, obligatorio (`type` = `command` en las opciones de
+  `WriteValue`).
+- **No hace falta handshake, ni CCCD, ni el `07` previo.** El `2a02a1…af` del snoop
+  es ruido, y el `07` al handle `0x0011` iba a *Client Supported Features*
+  (`2b29`), que es GATT estándar del cliente y no protocolo de la tira.
+
+Los nueve formatos que fallaron el 31/08 fallaron por mirar la familia equivocada,
+no por faltarles el handshake — que era la hipótesis con la que se entró.
+
+### La trampa que se llevó media sesión: dos writes pegados se pierden
+
+Con el protocolo ya resuelto, el primer `rgbctl off && rgbctl <color>` dejó **una
+sola** tira encendida. La otra aceptó las dos escrituras sin error y se quedó
+apagada.
+
+No era la tira ni el color: era el **encendido y el color mandados uno atrás del
+otro**. Sin respuesta no hay control de flujo, y las dos tramas caen en el mismo
+intervalo de conexión: la segunda se pierde. Con `sleep 0.2` entre ellas las dos
+tiras siguen el ciclo parejo — reverificado apagando todo y volviendo en magenta.
+Por eso `PAUSA_TRAMA` en `rgbctl` no es adorno.
+
+### D-Bus directo, no `bluetoothctl`
+
+`rgbctl` escribe con `busctl call … org.bluez.GattCharacteristic1 WriteValue`. La
+escritura tarda **1 ms**, contra los 12–16 s que había medido la sesión anterior
+por conexión. Los 16,8 s que tarda `rgbctl` hoy son **enteros de OpenRGB**
+enumerando el SMBus: sumar las tiras no agregó latencia medible, así que el riesgo
+que el plan marcaba para el toggle del hub no existió.
+
+Dos cosas hicieron falta para llegar ahí:
+
+- **Resolver la característica por UUID debajo de *ese* device.** `0000ffe1-…`
+  existe en las dos tiras, con el mismo path (`service0016/char0019`, mismo
+  firmware). `bluetoothctl select-attribute` por UUID a secas engancha el device
+  anterior y manda todo a la tira equivocada — una corrida entera se fue así.
+- **Marcarlas `trusted`.** Sin emparejar, BlueZ las tira de la caché y `connect`
+  contesta `Device … not available`, obligando a un escaneo de 12 s. Con `trusted`,
+  reconectar después de un `disconnect` tardó **0,4 s**. Lo hace ahora
+  `setup/modules/80-rgb.sh` (función `rgb_tiras`), así que sobrevive a un reinstall.
+
+Sigue vigente del 31/08: **el Bluetooth arranca *soft blocked*** por `rfkill` y el
+firmware del MT7922 falla el primer intento. Sospecha razonable: el fast startup de
+Windows, que esta máquina es dual boot. Ahora lo destraba **`rgbctl` solo**
+(`bluetooth_arriba`), porque `rfkill unblock bluetooth` no pide sudo y esperar a que
+el adaptador quede `Powered` alcanza. Probado bloqueándolo a mano y corriendo
+`rgbctl 00ff00`: exit 0, las dos tiras aplicadas, 20 s contra los 17 de base.
+
+### El botón «Luces» del hub, medido
+
+`mactahoe-tweaks@son.local` estaba `ACTIVE` y el toggle aparece: el grid de Quick
+Settings lo lista entre «Transparencia» y «Dock», en **1666,432 de 196×64**, y la
+captura recortada muestra el icono, el título, el subtítulo y el chevron del
+submenú.
+
+Lo que importaba medir era el congelamiento. Durante los ~17 s de una corrida
+disparada desde el toggle, `org.gnome.Shell.Eval` contestó **en 10 ms, ocho veces
+seguidas**: el `Gio.Subprocess` + `communicate_utf8_async` de `rgbControl.js` hace
+lo que promete el comentario. El ciclo completo prendió, en orden, **GPU → RAM 1 →
+RAM 2 → las dos tiras**, que es exactamente el orden en que `rgbctl` los recorre.
+
+El único desfasaje es cosmético y quedó anotado en `ESTADO.md`: `_sync()` dibuja el
+subtítulo desde la gsetting y no desde `rgbctl status`, así que si se aplicó un
+color por terminal el botón sigue diciendo el anterior.

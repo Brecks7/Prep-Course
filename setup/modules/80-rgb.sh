@@ -2,11 +2,11 @@
 # 80-rgb — control unificado del RGB de la máquina.
 #
 # Deja un solo comando, `rgbctl`, para prender, apagar y colorear los módulos de
-# RAM, la GPU y los headers de la placa, más un servicio de usuario que devuelve
-# el último color al entrar a la sesión.
+# RAM, la GPU, los headers de la placa y las dos tiras BLE, más un servicio de
+# usuario que devuelve el último color al entrar a la sesión.
 #
-# Las tiras BLE no están cubiertas: se conectan y aceptan escrituras, pero su
-# protocolo no se identificó. Ver ESTADO.md.
+# Las tiras no necesitan instalación: se hablan por BlueZ, que ya viene con el
+# sistema. Sí se marcan `trusted` para que reconecten solas sin escanear.
 
 modulo_rgb() {
     log_step "80-rgb · Control del RGB"
@@ -18,7 +18,40 @@ modulo_rgb() {
 
     rgb_openrgb || return 0
     rgb_enlace
+    rgb_tiras
     rgb_servicio
+}
+
+# Las tiras BLE no se instalan: ya las habla `rgbctl` por BlueZ. Lo único que
+# aporta el kit es marcarlas `trusted`, para que reconecten solas en vez de
+# obligar a un escaneo de 12 s en cada arranque.
+rgb_tiras() {
+    if ! has_cmd bluetoothctl; then
+        note_todo "Sin bluetoothctl: las tiras BLE quedan fuera de rgbctl"
+        return 0
+    fi
+
+    local macs
+    macs="$(bluetoothctl devices 2>/dev/null | grep -i 'LEDDMX' | awk '{print $2}')"
+    if [[ -z "$macs" ]]; then
+        note_todo "No veo las tiras BLE — prendelas y corré: bluetoothctl scan le"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "1" ]]; then
+        log_info "[dry] marcar como trusted: $(echo "$macs" | tr '\n' ' ')"
+        return 0
+    fi
+
+    local mac n=0
+    while read -r mac; do
+        [[ -n "$mac" ]] || continue
+        if bluetoothctl trust "$mac" >/dev/null 2>&1; then
+            record_action "tira BLE marcada como trusted: $mac"
+            n=$((n + 1))
+        fi
+    done <<< "$macs"
+    note_ok "$n tira(s) BLE reconectan solas — rgbctl las incluye"
 }
 
 # `rgbctl` vive en el repo, pero el hub y cualquier terminal esperan encontrarlo

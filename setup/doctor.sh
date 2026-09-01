@@ -405,10 +405,33 @@ else
     res "RGB: sin OpenRGB"
 fi
 
-# Las dos tiras BLE: se conectan pero su protocolo no se identificó (ver ESTADO.md).
+# Las dos tiras BLE, que rgbctl maneja por BlueZ. Sin emparejar se caen de la
+# caché de BlueZ: si no aparecen, hay que escanear (`bluetoothctl scan le`).
 if hay bluetoothctl; then
     N_TIRAS=$(bluetoothctl devices 2>/dev/null | grep -ci "LEDDMX")
-    [[ "${N_TIRAS:-0}" -gt 0 ]] && dato "$N_TIRAS tira(s) BLE conocidas — todavía sin protocolo, ver ESTADO.md"
+    N_CONECTADAS=0
+    N_TRUSTED=0
+    while read -r MAC; do
+        [[ -n "$MAC" ]] || continue
+        INFO="$(bluetoothctl info "$MAC" 2>/dev/null)"
+        grep -q "Connected: yes" <<< "$INFO" && N_CONECTADAS=$((N_CONECTADAS + 1))
+        grep -q "Trusted: yes"   <<< "$INFO" && N_TRUSTED=$((N_TRUSTED + 1))
+    done < <(bluetoothctl devices 2>/dev/null | grep -i "LEDDMX" | awk '{print $2}')
+
+    if [[ "${N_TIRAS:-0}" -gt 0 ]]; then
+        bien "$N_TIRAS tira(s) BLE — $N_CONECTADAS conectada(s), $N_TRUSTED trusted"
+        res "RGB: $N_TIRAS tiras BLE"
+        [[ "$N_TRUSTED" -lt "$N_TIRAS" ]] && \
+            dato "Alguna tira no está trusted: no reconecta sola. Se arregla con: bash setup/install.sh --yes --rgb"
+    else
+        if rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; then
+            dato "El Bluetooth está bloqueado por rfkill — rgbctl lo destraba solo al correr"
+        else
+            dato "No veo las tiras BLE — prendelas y corré: bluetoothctl scan le"
+        fi
+    fi
+elif hay openrgb; then
+    dato "Sin bluetoothctl: las tiras BLE quedan fuera de rgbctl"
 fi
 
 # --- Errores del shell -----------------------------------------------------

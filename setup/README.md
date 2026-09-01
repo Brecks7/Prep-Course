@@ -88,9 +88,24 @@ Dos cosas que conviene saber antes de tocarlo:
 - El ruido `[i2c_smbus_linux] Failed to read i2c device PCI device ID` es de los
   buses DDC de los monitores. No es un error y `rgbctl` lo descarta.
 
-Las **tiras BLE no están cubiertas**: se conectan y aceptan escrituras, pero su
-protocolo no se identificó. El estado y los nueve formatos ya descartados están en
-`ESTADO-historial.md`.
+Las **dos tiras BLE también entran por `rgbctl`**, pero por otro camino: BlueZ en
+vez de OpenRGB, con protocolo propio (familia `7b…bf` sobre la característica
+`0000ffe1`, write sin respuesta). Tres cosas que no son negociables ahí:
+
+- **La característica se resuelve por UUID debajo del path del device.**
+  `bluetoothctl select-attribute` por UUID a secas engancha el device anterior y
+  manda todo a la tira equivocada.
+- **Hay una pausa entre tramas** (`PAUSA_TRAMA`). Sin respuesta no hay control de
+  flujo: dos escrituras pegadas caen en el mismo intervalo de conexión y la tira se
+  come la segunda. Medido — sin la pausa, una de las dos quedaba apagada.
+- **Las tiras van `trusted`** (lo hace el módulo `80-rgb`). Sin eso BlueZ las tira
+  de la caché y cada corrida arranca con un escaneo de 12 s. `--sin-tiras` las
+  saltea si el Bluetooth está caído.
+- **`rgbctl` destraba el `rfkill` solo.** El Bluetooth de esta máquina arranca
+  *soft blocked* y no hace falta sudo para levantarlo. Probado bloqueándolo a mano:
+  la corrida pasa de 17 a 20 s y las dos tiras aplican igual.
+
+El relato completo está en `ESTADO-historial.md`, «RGB — las tiras BLE, resueltas».
 
 ## Sobre `--theme` y tu configuración actual
 
