@@ -41,8 +41,9 @@ tres clics sobre el icono de la terminal.
 **El RGB quedó unificado salvo las tiras.** `rgbctl` (en el PATH por symlink) es
 el único lado: aplica color, `on` y `off` a los **dos módulos de RAM**, la **GPU** y
 los headers de la placa, y guarda lo último para que `rgb-restore.service` lo
-reponga al iniciar sesión. Verificado a ojo el 01/09: la GPU en azul y **la RAM
-dejó el arcoíris**. Falta que confirmes el rojo de la última corrida.
+reponga al iniciar sesión. Verificado a ojo el 01/09 y **en dos colores distintos**:
+la GPU en azul, y **la RAM dejó el arcoíris** — primero azul, después rojo. Ese
+frente está cerrado.
 
 **Lo que no salió son las dos tiras BLE, y el bloqueo ya no es la conexión.** Borrar
 el bond las destrabó: ahora conectan, resuelven GATT y **aceptan las escrituras con
