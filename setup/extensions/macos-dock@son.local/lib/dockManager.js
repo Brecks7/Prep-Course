@@ -9,6 +9,7 @@ import { DockVisibility } from "./dockVisibility.js";
 import { IconManager } from "./iconManager.js";
 import { Intellihide } from "./intellihide.js";
 import { Magnification } from "./magnification.js";
+import { metrics } from "./metrics.js";
 import { SignalManager } from "./signalManager.js";
 const POSITIONS = { BOTTOM: 0, LEFT: 1, RIGHT: 2, TOP: 3 };
 export class DockManager {
@@ -36,13 +37,15 @@ export class DockManager {
     constructor() {
         this._signals = new SignalManager();
     }
+    /** Las medidas del dock para el `icon-size` de ahora. Ver lib/metrics.js. */
+    get _metrics() {
+        return metrics(this._settings?.get_int("icon-size") ?? 48);
+    }
     get _iconActorHeight() {
-        // IconManager le da a cada icono (icon-size + 12) x (icon-size + 16).
-        return (this._settings?.get_int("icon-size") ?? 48) + 16;
+        return this._metrics.actorHeight;
     }
     get _dockHeight() {
-        const verticalPadding = 8; // 4px top + 4px bottom from _applyDockStyle
-        return this._iconActorHeight + verticalPadding;
+        return this._metrics.dockThickness;
     }
     /**
      * Espacio libre que hay que reservar por fuera del rectángulo para que el
@@ -99,6 +102,11 @@ export class DockManager {
         this._iconManager = new IconManager(this._iconBox, settings.get_int("icon-size"), settings.get_boolean("running-indicators"), settings.get_int("icon-quality"), settings.get_int("running-indicator-style"));
         this._iconManager.setOnClicked((app) => this._onAppClicked(app));
         this._iconManager.setOnIconsChanged(() => this._updatePosition());
+        // Los dos extremos del dock se aplican antes de poblarlo: si no, la
+        // gsetting en `false` recién se respetaba al cambiarla a mano, y el
+        // botón aparecía igual en cada arranque.
+        this._iconManager.setShowAppButton(settings.get_boolean("show-applications-button"));
+        this._iconManager.setShowTrash(settings.get_boolean("show-trash"));
         this._iconManager.start();
         // Magnification: scale icons on hover.
         this._magnification = new Magnification(this._iconBox, settings.get_boolean("magnification-enabled"), settings.get_double("magnification-scale"), settings.get_int("magnification-falloff"), settings.get_int("magnification-framerate"));
@@ -116,6 +124,9 @@ export class DockManager {
             if (this._iconManager) {
                 this._iconManager.setIconSize(settings.get_int("icon-size"));
             }
+            // El padding y el spacing del iconBox se derivan del tamaño del
+            // icono (lib/metrics.js), así que el estilo también se rehace.
+            this._applyDockStyle();
             this._updatePosition();
         });
         this._signals.connect(settings, "changed::auto-hide", () => {
@@ -181,6 +192,12 @@ export class DockManager {
         this._signals.connect(settings, "changed::dock-border-radius", () => this._applyDockStyle());
         this._signals.connect(settings, "changed::dock-blur-enabled", () => this._applyDockStyle());
         this._signals.connect(settings, "changed::dock-position", () => this._applyDockPosition());
+        this._signals.connect(settings, "changed::show-trash", () => {
+            if (this._iconManager) {
+                this._iconManager.setShowTrash(settings.get_boolean("show-trash"));
+            }
+            this._updatePosition();
+        });
         this._signals.connect(settings, "changed::show-applications-button", () => {
             if (this._iconManager) {
                 this._iconManager.setShowAppButton(settings.get_boolean("show-applications-button"));
@@ -373,22 +390,24 @@ export class DockManager {
         const monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
             return;
+        const m = this._metrics;
         const iconCount = this._iconManager?.getIconCount() ?? 0;
-        const hasSeparator = this._iconManager?.hasSeparator() ?? false;
-        const hasAppButton = this._iconManager?.hasAppButton() ?? false;
-        const iconPadded = (this._settings?.get_int("icon-size") ?? 48) + 12;
-        const spacing = 6;
-        const padding = 20;
-        const separatorWidth = 9; // 1px width + 4px margin each side
-        const contentSize = iconCount > 0
-            ? iconCount * iconPadded +
-                (iconCount - 1) * spacing +
-                (hasSeparator ? separatorWidth + spacing : 0) +
-                (hasAppButton ? iconPadded + spacing : 0)
-            : hasAppButton
-                ? iconPadded
-                : 0;
-        const dockAxisSize = Math.max(contentSize + padding, DockManager.MIN_DOCK_WIDTH);
+        // Cada extra (los dos separadores, el botón de aplicaciones, la
+        // papelera) suma su ancho más un `spacing`, porque va detrás de algo.
+        const separators = this._iconManager?.getSeparatorCount() ?? 0;
+        const buttons = this._iconManager?.getButtonCount() ?? 0;
+        const slots = iconCount + buttons;
+        // Un BoxLayout de N hijos mide la suma de los anchos más (N-1) huecos.
+        // Los hijos son los slots más los separadores, y el separador es una
+        // caja: la línea más su aire a los dos lados (ver _makeSeparator()).
+        const children = slots + separators;
+        const separatorSlot = m.separatorWidth + 2 * m.separatorMargin;
+        const contentSize = children > 0
+            ? slots * m.actorWidth +
+                separators * separatorSlot +
+                (children - 1) * m.spacing
+            : 0;
+        const dockAxisSize = Math.max(contentSize + 2 * m.padSide, DockManager.MIN_DOCK_WIDTH);
         const thickness = this._dockHeight;
         const headroom = this._magnificationHeadroom;
         const margin = DockManager.MARGIN_BOTTOM;
@@ -489,13 +508,22 @@ export class DockManager {
         const alpha = opacity / 100;
         // El fondo pinta; la caja de iconos sólo espacia. Antes iban juntos y el
         // padding empujaba el rectángulo.
+        //
+        // El relieve son dos bordes distintos, como en el dock de macOS: arriba
+        // un hairline claro (ahí medí #3D3D3D sobre un fondo #111111, o sea
+        // blanco al 18%) y abajo uno apenas más apagado (#2A2A2A, blanco al 8%).
+        // Un solo borde parejo se ve plano; la diferencia entre los dos es lo
+        // que hace que la píldora parezca levantada.
         this._background.style = `
       background-color: rgba(${r}, ${g}, ${b}, ${alpha});
       border-radius: ${radius}px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-top: 1px solid rgba(255, 255, 255, 0.18);
     `;
+        const m = this._metrics;
         this._iconBox.style = `
-      padding: 4px 10px;
-      spacing: 6px;
+      padding: ${m.padTop}px ${m.padSide}px ${m.padBottom}px ${m.padSide}px;
+      spacing: ${m.spacing}px;
     `;
         // Handle blur effect
         if (blurEnabled && !this._blurEffect) {

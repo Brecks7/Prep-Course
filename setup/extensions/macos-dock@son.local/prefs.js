@@ -145,6 +145,12 @@ export default class MacosDockPreferences extends ExtensionPreferences {
         });
         settings.bind("show-applications-button", appButtonRow, "active", BIND_FLAGS);
         behaviorGroup.add(appButtonRow);
+        const trashRow = new Adw.SwitchRow({
+            title: "Show trash",
+            subtitle: "Separator and trash can at the end of the dock",
+        });
+        settings.bind("show-trash", trashRow, "active", BIND_FLAGS);
+        behaviorGroup.add(trashRow);
         // Magnification group
         const magGroup = new Adw.PreferencesGroup({
             title: "Magnification",

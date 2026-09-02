@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""medir-dock — sacarle los números a una captura del dock.
+
+Existe porque cuatro diagnósticos de este repo salieron mal por afirmar sin
+medir. «Se ve más parecido» no es un resultado; esto sí:
+
+    bash setup/shot.sh --out /tmp/dock.png
+    setup/bin/medir-dock /tmp/dock.png
+    setup/bin/medir-dock ~/Descargas/DOCK.png      # la referencia de macOS
+
+Encuentra el rectángulo del dock buscando el bloque más ancho que se despega
+del fondo y devuelve alto, ancho, radio de esquina, los dos bordes (arriba y
+abajo, que en macOS son distintos: ahí está el relieve), el paso entre iconos y
+el diámetro y color de los puntos de app viva. Las proporciones con las que se
+comparan están en setup/extensions/macos-dock@son.local/lib/metrics.js.
+"""
+import sys
+from PIL import Image
+
+
+def cargar(ruta):
+    return Image.open(ruta).convert("RGB")
+
+
+def fondo(px, w, h):
+    """Color más repetido en el borde de la imagen: lo que NO es el dock."""
+    cuenta = {}
+    for x in range(0, w, max(1, w // 200)):
+        for y in (0, h - 1):
+            cuenta[px[x, y]] = cuenta.get(px[x, y], 0) + 1
+    return max(cuenta, key=cuenta.get)
+
+
+def dist(a, b):
+    return max(abs(a[i] - b[i]) for i in range(3))
+
+
+def caja(px, w, h, bg, umbral=8):
+    xs, ys = [], []
+    for y in range(h):
+        for x in range(0, w, 2):
+            if dist(px[x, y], bg) > umbral:
+                xs.append(x)
+                ys.append(y)
+                break
+    if not ys:
+        return None
+    y0, y1 = min(ys), max(ys)
+    fila = (y0 + y1) // 2
+    cols = [x for x in range(w) if dist(px[x, fila], bg) > umbral]
+    return min(cols), y0, max(cols), y1
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(__doc__)
+        return 2
+    im = cargar(sys.argv[1])
+    px, (w, h) = im.load(), im.size
+    bg = fondo(px, w, h)
+    c = caja(px, w, h, bg)
+    if not c:
+        print("no encontré ningún dock: la captura es toda del mismo color")
+        return 1
+    x0, y0, x1, y1 = c
+    alto, ancho = y1 - y0 + 1, x1 - x0 + 1
+    print(f"dock          {ancho} x {alto}  en ({x0},{y0})")
+    print(f"fondo         {px[(x0 + x1) // 2, y0 + 3]}   (afuera: {bg})")
+    print(f"borde arriba  {[px[(x0 + x1) // 2, y0 + k] for k in range(3)]}")
+    print(f"borde abajo   {[px[(x0 + x1) // 2, y1 - k] for k in range(3)]}")
+
+    # Radio: primera fila donde el borde izquierdo ya llegó al extremo.
+    radio = 0
+    for dy in range(alto // 2):
+        fila = y0 + dy
+        cols = [x for x in range(x0 - 2, x0 + alto) if dist(px[x, fila], bg) > 8]
+        if cols and cols[0] - x0 <= 0:
+            radio = dy
+            break
+    print(f"radio         ~{radio}")
+
+    # Iconos: bloques de color en la banda donde vive el arte.
+    # El interior se lee arriba del centro, no en una esquina: ahí la curva
+    # todavía deja ver el fondo de afuera y toda la comparación sale corrida.
+    interior = px[(x0 + x1) // 2, y0 + 3]
+    fila = y0 + int(alto * 0.45)
+    runs, dentro, ini = [], False, 0
+    for x in range(x0 + 2, x1 - 1):
+        on = dist(px[x, fila], interior) > 18
+        if on and not dentro:
+            ini, dentro = x, True
+        elif not on and dentro:
+            runs.append((ini, x - ini))
+            dentro = False
+    anchos = [n for _, n in runs if n > alto * 0.2]
+    pasos = [b[0] - a[0] for a, b in zip(runs, runs[1:]) if a[1] > alto * 0.2 and b[1] > alto * 0.2]
+    print(f"iconos        {len(anchos)} de ~{max(set(anchos), key=anchos.count) if anchos else 0} px")
+    print(f"paso          {sorted(set(pasos))[:4] if pasos else '-'}")
+
+    # Puntos: banda de abajo, bloques chicos.
+    fila = y1 - max(2, int(alto * 0.12))
+    puntos, dentro, ini = [], False, 0
+    for x in range(x0 + 2, x1 - 1):
+        on = dist(px[x, fila], interior) > 10
+        if on and not dentro:
+            ini, dentro = x, True
+        elif not on and dentro:
+            puntos.append((ini, x - ini))
+            dentro = False
+    chicos = [n for _, n in puntos if 2 <= n <= alto * 0.2]
+    if chicos:
+        d = max(set(chicos), key=chicos.count)
+        muestra = next(i for i, n in puntos if n == d)
+        print(f"puntos        {len(chicos)} de ⌀{d}  color {px[muestra + d // 2, fila]}")
+    else:
+        print("puntos        ninguno en esta fila (¿dock sin apps abiertas?)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

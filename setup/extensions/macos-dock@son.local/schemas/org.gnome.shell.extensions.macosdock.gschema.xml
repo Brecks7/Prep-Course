@@ -69,17 +69,17 @@
       <description>Pixels of pressure against the screen edge needed to reveal the dock. Low values feel like macOS; raise it if the dock pops up by accident.</description>
     </key>
     <key name="dock-opacity" type="i">
-      <default>60</default>
+      <default>78</default>
       <summary>Dock opacity</summary>
       <description>Dock background opacity percentage (0-100)</description>
     </key>
     <key name="dock-background-color" type="s">
-      <default>'#1e1e1e'</default>
+      <default>'#111111'</default>
       <summary>Dock background color</summary>
       <description>Hex color for dock background (e.g. #1e1e1e)</description>
     </key>
     <key name="dock-border-radius" type="i">
-      <default>16</default>
+      <default>18</default>
       <summary>Dock border radius</summary>
       <description>Corner radius of the dock in pixels</description>
     </key>
@@ -152,6 +152,11 @@
       <default>['&lt;Super&gt;0']</default>
       <summary>Focus app 10</summary>
       <description>Keyboard shortcut to focus the tenth app in the dock</description>
+    </key>
+    <key name="show-trash" type="b">
+      <default>true</default>
+      <summary>Show trash</summary>
+      <description>Show a separator and the trash can at the end of the dock</description>
     </key>
     <key name="show-applications-button" type="b">
       <default>true</default>

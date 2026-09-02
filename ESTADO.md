@@ -30,6 +30,23 @@ claves SSH, así que `git push` muere con `could not read Username for
 (interactivo, **lo corre la persona**), o con una clave SSH y el remoto en
 `git@github.com:`.
 
+**El dock se restyló y falta medirlo en la sesión real.** El 02/09 se rehizo el
+estilo contra `~/Descargas/DOCK.png` (dock de macOS Tahoe, medido con PIL, no a
+ojo): las medidas se unificaron en `lib/metrics.js`, el rectángulo tiene hairline
+de relieve, los puntos son más tenues, el separador tiene aire, hay papelera al
+final y globo de notificaciones. El sandbox headless lo deja ACTIVE sin un error,
+pero **los píxeles no se midieron todavía**. Al volver a entrar:
+
+```bash
+bash setup/gshell.sh push bottom
+bash setup/shot.sh --out /tmp/dock.png
+setup/bin/medir-dock /tmp/dock.png       # y comparar con ~/Descargas/DOCK.png
+```
+
+Con `icon-size 40` tiene que dar: 511×66, radio ~18, el borde de arriba más claro
+que el de abajo, paso entre iconos 51 y puntos de ⌀5 al 55% de blanco. Revertir
+todo el estilo: `~/.setup-ubuntu-backups/dock-antes-20260902.sh`.
+
 **Falta un login limpio para el dock.** Los dos arreglos del 31/08 —umbral de
 revelado y ciclado del clic— están verificados, pero la sesión viva quedó con una
 barrera de presión huérfana (GNOME marcó `macos-dock` INACTIVE al detectar los
@@ -181,6 +198,14 @@ bash setup/gshell.sh find macos-dock-root
   `rgbctl status` se sincronizan al abrir el menú, pero `_sync()` sólo lee la
   gsetting. Se ve al aplicar magenta por CLI y encontrar el botón diciendo «Azul».
   Cosmético: el color aplicado es el correcto, lo que está desfasado es la etiqueta.
+- **El globo de notificaciones no se probó contra una app real.** `lib/badges.js`
+  ata una fuente de la bandeja a una app por tres caminos (la `Shell.App` que
+  publica, el id de escritorio, el título) y si ninguno pega la ignora, así que
+  el riesgo es que no aparezca nunca, no que aparezca en el icono equivocado.
+  Se comprueba dejando notificaciones sin leer de Discord.
+- **La papelera no se magnifica distinto que el resto**: crece como un icono más,
+  igual que el botón de aplicaciones. En macOS también. No es un pendiente, es
+  para que nadie lo "arregle".
 - **Brillo y velocidad de las tiras siguen sin identificar.** El análogo `7b` no se
   buscó; el camino es volver al `btsnoop_hci.log` del bugreport.
 - **El SMT del 9800X3D está apagado en la BIOS: 8 hilos en vez de 16.**

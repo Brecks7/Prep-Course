@@ -34,43 +34,56 @@
   border-radius: 8px;
 }
 
+/* La sombra del arte es sutil a propósito: en el dock de macOS el icono se
+ * despega del fondo con un halo corto, no con un bulto oscuro. */
 .macos-dock-icon-gicon {
-  icon-shadow: 0 2px 3px rgba(0, 0, 0, 0.4);
+  icon-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
+/* El spacing y el margen los pone _applyIconSize() desde lib/metrics.js: los
+ * puntos tienen que bajar y separarse cuando crece `icon-size`. */
 .macos-dock-indicator-box {
-  spacing: 3px;
-  margin-top: 2px;
+  spacing: 4px;
+  margin-top: 3px;
 }
 
+/* Ancho, alto y radio salen del estilo inline (lib/metrics.js). Acá sólo el
+ * color: en la referencia el punto es #8D8D8D sobre un fondo #111111, o sea
+ * blanco al 55%, no el blanco casi puro que había antes. */
 .macos-dock-indicator-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 2px;
-  background-color: rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.55);
 }
 
 .macos-dock-indicator-bar {
-  width: 16px;
-  height: 3px;
-  border-radius: 1.5px;
-  background-color: rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.55);
+}
+
+/* Globo de notificaciones, arriba a la derecha del icono. El tamaño y la
+ * posición los pone _refreshBadge() desde lib/metrics.js. */
+.macos-dock-badge {
+  background-color: #ff3b30;
+  color: #ffffff;
+  font-weight: bold;
+  text-align: center;
+  border: 1px solid rgba(0, 0, 0, 0.25);
 }
 
 /* Tooltip */
 .macos-dock-tooltip {
-  background-color: rgba(30, 30, 30, 0.9);
+  background-color: rgba(17, 17, 17, 0.92);
   color: white;
-  border-radius: 6px;
-  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 5px 11px;
 }
 
 /* Context Menu */
 .macos-dock-context-menu {
-  background-color: rgba(40, 40, 40, 0.95);
-  border-radius: 8px;
+  background-color: rgba(28, 28, 28, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
   padding: 4px 0;
-  min-width: 120px;
+  min-width: 150px;
 }
 
 .macos-dock-context-menu-item {
@@ -90,10 +103,12 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Separator */
+/* Separador. El ancho y el alto los pone _styleSeparator() desde
+ * lib/metrics.js; el margen tiene que coincidir con el `spacing` que
+ * _updatePosition() le reserva a cada separador, o el rectángulo queda corto.
+ * Medido en la referencia: 2px de #525252, o sea blanco al 28%. */
 .macos-dock-separator {
-  background-color: rgba(255, 255, 255, 0.3);
-  margin: 0 4px;
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 /* Applications Button */
@@ -103,8 +118,8 @@
 }
 
 .macos-dock-app-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
 }
 
 .macos-dock-app-button-icon {

@@ -108,7 +108,9 @@ export class Magnification {
             return false;
         if (!this._container.visible)
             return this._resetAll();
-        const children = this._container.get_children();
+        // Todo lo que ocupa un lugar en la fila se magnifica —iconos, botón de
+        // aplicaciones, papelera— menos los separadores, que sólo se estirarían.
+        const children = this._container.get_children().filter((c) => !c._isSeparator);
         if (children.length === 0)
             return false;
         const [px, py] = global.get_pointer();
