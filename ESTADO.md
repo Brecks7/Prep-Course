@@ -38,9 +38,8 @@ revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
 es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
 tres clics sobre el icono de la terminal.
 
-**El RGB está cerrado entero, tiras incluidas** — ver «Qué funciona». Lo único que
-falta es reiniciar y confirmar que `rgb-restore.service` las repone también con la
-caché de BlueZ fría (ver «Abierto»).
+**El RGB está cerrado entero, tiras incluidas, y el restore al arrancar también**
+— ver «Qué funciona». No queda nada pendiente de este tema.
 
 Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
 (ver «Abierto»).
@@ -78,6 +77,17 @@ bash setup/gshell.sh find macos-dock-root
   celular es ruido. Las tramas exactas están en `rgbctl` y el porqué en
   `ESTADO-historial.md`, «RGB — las tiras BLE, resueltas». Verificado a ojo el 01/09
   en cinco colores y apagado, en las dos.
+- **`rgb-restore.service` repone las tiras aunque el arranque sea el peor caso.**
+  Verificado el 02/09 simulando un arranque virgen **más duro que el real**: se
+  sacaron las dos tiras de la caché de BlueZ (`bluetoothctl remove`, que además les
+  quita el `trusted`) **y** se bloqueó el Bluetooth por `rfkill`, los dos factores a
+  la vez. `rgbctl restore` salió **rc=0 con las dos tiras aplicadas en 32,9 s**:
+  destrabó el `rfkill` solo, escaneó, encontró las tiras y les escribió. El arranque
+  real es más benigno —BlueZ persiste los dispositivos en `/var/lib/bluetooth`, así
+  que la caché **no** arranca vacía y el `trusted` sobrevive—, y ahí la corrida son
+  ~17 s. El `sleep 5` del `ExecStartPre` nunca fue el riesgo: es un retardo, no un
+  plazo, y `rgbctl` espera al adaptador por su cuenta.
+
 - **El botón «Luces» del hub prende, apaga y no congela el escritorio.** Verificado
   el 01/09: el toggle está en Quick Settings (medido en píxeles, 196×64 en
   1666,432), el ciclo arrastra GPU, las dos RAM y las dos tiras en ese orden, y
@@ -166,13 +176,6 @@ bash setup/gshell.sh find macos-dock-root
 
 ## Abierto
 
-- **Falta reiniciar y confirmar que `rgb-restore.service` repone las tiras.** El
-  servicio ya las repone con la sesión caliente (probado: exit 0, las dos tiras
-  entre los `ok`), y el caso del **Bluetooth *soft blocked*** se simuló bloqueándolo
-  a mano: `rgbctl` lo destraba solo y termina en 20 s en vez de 17. Lo que **no** se
-  pudo probar es el arranque de verdad, con la caché de BlueZ fría: ahí `rgbctl`
-  tiene que escanear 12 s antes de conectar, y el `sleep 5` del servicio puede
-  quedar corto. Se las dejó `trusted` para que reconecten solas.
 - **El subtítulo del toggle «Luces» miente si se usó `rgbctl` desde la terminal.**
   El comentario de cabecera de `rgbControl.js` promete que la gsetting y
   `rgbctl status` se sincronizan al abrir el menú, pero `_sync()` sólo lee la

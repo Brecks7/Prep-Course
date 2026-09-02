@@ -1,4 +1,4 @@
-# Historial del escritorio — sesiones del 26 de agosto al 1 de septiembre de 2026
+# Historial del escritorio — sesiones del 26 de agosto al 2 de septiembre de 2026
 
 Esto es el relato completo de cada sesión: síntomas, diagnósticos, callejones sin
 salida y evidencia. **No se lee al arrancar.** `ESTADO.md` dice en qué anda cada
@@ -1094,3 +1094,40 @@ RAM 2 → las dos tiras**, que es exactamente el orden en que `rgbctl` los recor
 El único desfasaje es cosmético y quedó anotado en `ESTADO.md`: `_sync()` dibuja el
 subtítulo desde la gsetting y no desde `rgbctl status`, así que si se aplicó un
 color por terminal el botón sigue diciendo el anterior.
+
+## RGB — el restore al arrancar, verificado sin reiniciar (02/09/2026)
+
+Quedaba una sola cosa del RGB: confirmar que `rgb-restore.service` repone también
+las tiras BLE cuando el arranque es de verdad, con la caché de BlueZ fría. La
+sesión anterior sólo lo había probado con la sesión caliente.
+
+**El primer journal engañó.** El arranque del 01/09 a las 18:47 muestra el servicio
+terminando `ok` con los cuatro dispositivos de OpenRGB y **ninguna línea `ok
+tira`** — que es exactamente el síntoma que se estaba buscando. Pero no probaba
+nada: el `mtime` de `rgbctl` es de las **20:42** y el commit de las **20:44**. A las
+18:47 corrió la versión vieja, la que todavía no sabía de las tiras. Sin cruzar esa
+fecha, el journal habría hecho perder la sesión persiguiendo un bug inexistente.
+
+**No hizo falta reiniciar.** La caché de BlueZ se vacía a mano: `bluetoothctl
+remove <MAC>` saca el dispositivo de `/var/lib/bluetooth`, que es donde persiste
+entre arranques. Con las dos tiras removidas —lo que además les quita el
+`trusted`— y el Bluetooth bloqueado por `rfkill`, el escenario queda **más severo
+que cualquier arranque real**, porque en el arranque real la caché no está vacía y
+el `trusted` sobrevive.
+
+`rgbctl restore` en ese estado: **rc=0, las dos tiras aplicadas, 32,9 s**. Destrabó
+el `rfkill`, esperó el firmware del MT7922, escaneó, encontró las dos tiras y les
+escribió. Después se les repuso el `trusted` y el `doctor.sh` volvió a dar «2 tiras
+BLE — 2 conectadas, 2 trusted» con 0 críticos.
+
+De paso cayó la preocupación mal planteada: el `ExecStartPre=/usr/bin/sleep 5` no
+podía «quedar corto». Es un retardo antes de arrancar, no un plazo para terminar;
+si `rgbctl` tarda 33 s, el servicio tarda 33 s y termina bien igual. Lo que sí
+importa —que el adaptador esté disponible— ya lo espera `rgbctl` por su cuenta.
+
+**Hallazgo lateral del journal:** el kernel loguea `RTC configured in localtime,
+applying delta of -180 minutes to system time`. El reloj del hardware está en hora
+local porque lo escribe así Windows, y Ubuntu lo corrige tres segundos después de
+arrancar. Es la razón de que las primeras líneas de cada boot aparezcan con tres
+horas de más en `journalctl`, y no tiene nada que ver con el RGB. Funciona, pero
+conviene saberlo antes de leer timestamps tempranos.
