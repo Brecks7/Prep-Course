@@ -375,6 +375,11 @@ export class IconManager {
             y_align: Clutter.ActorAlign.START,
             x_expand: true,
             y_expand: true,
+            // Muerde la esquina del arte y asoma un poco hacia afuera, como en
+            // macOS. El desplazamiento entra en el aire del actor, así que no
+            // llega a tocar el icono de al lado.
+            translation_x: 3,
+            translation_y: -3,
         });
         iconWrap.add_child(badge);
         actor.add_child(iconWrap);

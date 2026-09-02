@@ -30,22 +30,21 @@ claves SSH, así que `git push` muere con `could not read Username for
 (interactivo, **lo corre la persona**), o con una clave SSH y el remoto en
 `git@github.com:`.
 
-**El dock se restyló y falta medirlo en la sesión real.** El 02/09 se rehizo el
-estilo contra `~/Descargas/DOCK.png` (dock de macOS Tahoe, medido con PIL, no a
-ojo): las medidas se unificaron en `lib/metrics.js`, el rectángulo tiene hairline
-de relieve, los puntos son más tenues, el separador tiene aire, hay papelera al
-final y globo de notificaciones. El sandbox headless lo deja ACTIVE sin un error,
-pero **los píxeles no se midieron todavía**. Al volver a entrar:
+**El dock nuevo está medido y aprobado en el sandbox; falta verlo en la sesión
+real.** El shell vivo sigue corriendo el código viejo y va a seguir así hasta el
+próximo login: GNOME 50 no recarga el JS de una extensión, `_callExtensionEnable`
+reusa el `stateObj` que ya tiene en memoria (verificado leyendo
+`extensionSystem.js` del gresource). Lo único que sí se recarga en un
+disable/enable es el `stylesheet.css`.
+
+Al volver a entrar, alcanza con mirar el dock. Si algo no cierra:
 
 ```bash
-bash setup/gshell.sh push bottom
-bash setup/shot.sh --out /tmp/dock.png
-setup/bin/medir-dock /tmp/dock.png       # y comparar con ~/Descargas/DOCK.png
+bash setup/shell-sandbox.sh --shot /tmp/dock.png macos-dock@son.local
+setup/bin/medir-dock ~/Descargas/DOCK.png     # la referencia, mismo criterio
 ```
 
-Con `icon-size 40` tiene que dar: 511×66, radio ~18, el borde de arriba más claro
-que el de abajo, paso entre iconos 51 y puntos de ⌀5 al 55% de blanco. Revertir
-todo el estilo: `~/.setup-ubuntu-backups/dock-antes-20260902.sh`.
+Revertir todo el estilo: `~/.setup-ubuntu-backups/dock-antes-20260902.sh`.
 
 **Falta un login limpio para el dock.** Los dos arreglos del 31/08 —umbral de
 revelado y ciclado del clic— están verificados, pero la sesión viva quedó con una
@@ -161,6 +160,22 @@ bash setup/gshell.sh find macos-dock-root
   redimensionar una `MetaWindow` que mutter ya estaba desmanejando. Dos guards en
   `tiling.js`, en `setup/patches/paperwm-timeout-ventana-muerta.patch`. Cinco
   rondas de abrir y cerrar Discord, mismo PID del shell, cero segfaults.
+- **El dock quedó igual al de macOS, medido contra la referencia.** Se rehízo el
+  02/09 contra `~/Descargas/DOCK.png`, comparando números y no impresiones: las
+  proporciones viven en `lib/metrics.js` (arte 0.60 del alto del dock, hueco 0.27
+  del icono, margen 0.23, punto 0.13) y las consumen los tres lugares que antes
+  tenían números sueltos. Verificado en el sandbox con `--shot`, con `icon-size 40`:
+  dock **511×66**, padding lateral 9 y 9, paso entre iconos 51, separador de 34
+  centrado con 23 de aire a cada lado, puntos de **⌀5 en (148,148,148)** contra
+  ⌀8 en (141,141,141) de la referencia, y la curva de la esquina normalizada en
+  0.23 contra 0.24. Suma papelera con separador fijo (icono lleno/vacío por
+  monitor de `trash:///`, «Vaciar» en el menú derecho) y globo de notificaciones.
+  **Dos límites de St que costaron una corrida cada uno**: con `border-radius`
+  los cuatro bordes se pintan del mismo color, así que el relieve de dos tonos
+  del dock de macOS no se puede (el borde va parejo al 16% y quien levanta la
+  píldora es el `box-shadow`, que sí se dibuja y el CornerEffect no se come); y
+  el radio efectivo no es el número de la gsetting: 21 da la curva de la
+  referencia, 18 se queda corto.
 - **El dock se revela, se esconde y no deriva.** Tres bugs, los tres cerrados con
   medición: la barrera mal puesta más `_isAnimating` colgado (diez ciclos, Y de
   reposo en 987 exacto en las diez), los `enter/leave` de la raíz que eran código
@@ -198,6 +213,10 @@ bash setup/gshell.sh find macos-dock-root
   `rgbctl status` se sincronizan al abrir el menú, pero `_sync()` sólo lee la
   gsetting. Se ve al aplicar magenta por CLI y encontrar el botón diciendo «Azul».
   Cosmético: el color aplicado es el correcto, lo que está desfasado es la etiqueta.
+- **La proporción arte/dock es 0.54 y la referencia tiene 0.60**, porque los
+  iconos de MacTahoe dejan ~10% de margen adentro de su cuadro y los de macOS
+  van a sangre. Se compensaría subiendo `icon-size` a 44 o recortando `padTop`
+  en `metrics.js`; no se tocó porque los 40 px son elección del usuario.
 - **El globo de notificaciones no se probó contra una app real.** `lib/badges.js`
   ata una fuente de la bandeja a una app por tres caminos (la `Shell.App` que
   publica, el id de escritorio, el título) y si ninguno pega la ignora, así que

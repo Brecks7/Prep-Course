@@ -509,16 +509,21 @@ export class DockManager {
         // El fondo pinta; la caja de iconos sólo espacia. Antes iban juntos y el
         // padding empujaba el rectángulo.
         //
-        // El relieve son dos bordes distintos, como en el dock de macOS: arriba
-        // un hairline claro (ahí medí #3D3D3D sobre un fondo #111111, o sea
-        // blanco al 18%) y abajo uno apenas más apagado (#2A2A2A, blanco al 8%).
-        // Un solo borde parejo se ve plano; la diferencia entre los dos es lo
-        // que hace que la píldora parezca levantada.
+        // El relieve: un hairline claro alrededor más una sombra corta abajo.
+        //
+        // En el dock de macOS los bordes no son iguales —medí #3D3D3D arriba y
+        // #2A2A2A abajo sobre un fondo #111111— pero **St no puede hacer eso**:
+        // con `border-radius`, declarar `border-top` / `border-bottom` por
+        // separado no cambia nada, pinta los cuatro lados del mismo color
+        // (probado: 66 arriba y 65 abajo pidiendo 0.20 y 0.05). Así que el
+        // borde va parejo, en el promedio de los dos, y quien levanta la
+        // píldora del fondo es el `box-shadow` — ese sí lo dibuja, y el
+        // CornerEffect del blur no se lo come.
         this._background.style = `
       background-color: rgba(${r}, ${g}, ${b}, ${alpha});
       border-radius: ${radius}px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-top: 1px solid rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
     `;
         const m = this._metrics;
         this._iconBox.style = `

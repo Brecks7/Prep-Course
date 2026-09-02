@@ -730,6 +730,8 @@ acuerda.
 ```bash
 bash setup/shell-sandbox.sh mactahoe-tweaks@son.local
 bash setup/shell-sandbox.sh --seconds 20 macos-dock@son.local
+bash setup/shell-sandbox.sh --shot /tmp/dock.png macos-dock@son.local
+bash setup/shell-sandbox.sh --shot /tmp/r.png --set dock-border-radius=26 macos-dock@son.local
 ```
 
 Levanta un **GNOME Shell 50 aparte**, headless, con su propio bus de D-Bus y su
@@ -739,6 +741,30 @@ los `console.log` de las extensiones. Es la única forma de probar un cambio sin
 cerrar sesión: en Wayland `Alt+F2 r` no existe, y desde GNOME 50 el
 `ReloadExtension` de D-Bus responde `ReloadExtension is deprecated and does not
 work`.
+
+**`--shot` saca una captura del dock ahí adentro**, la recorta y le pasa las
+medidas a `bin/medir-dock`. Es lo que rompe el ciclo caro: copiar los archivos de
+la extensión **no** cambia lo que se ve en la sesión, porque GNOME 50 no recarga
+su JS —`_callExtensionEnable` reusa el `stateObj` que ya tiene en memoria (leído
+del `extensionSystem.js` del gresource)—, así que `shot.sh` fotografía el código
+viejo y uno "verifica" un cambio que no está corriendo. Lo único que un
+disable/enable sí recarga es el `stylesheet.css`.
+
+Que se pueda capturar ahí adentro es porque **el `AccessDenied` de
+`org.gnome.Shell.Screenshot` lo pone el servicio de D-Bus, no la clase**: desde
+adentro del shell, `new Shell.Screenshot()` anda. El probe que se engancha al
+`enable()` está en `lib/probe-dock.js`, con sus dos trampas anotadas: la captura
+tiene que ir en **otro tick** que los cambios de visibilidad (si no se guarda el
+frame anterior, con el dock todavía escondido), y en headless no hay ventanas, así
+que los puntos de app viva y el globo de notificación hay que ponerlos a mano o la
+foto no se puede comparar con nada.
+
+La captura sale con el dconf, los favoritos y el tema de iconos **reales**, no con
+los defaults: con el perfil vacío los iconos de Adwaita traen su propio margen y
+el dock parece tener más aire del que tiene. `--set clave=valor` pisa una gsetting
+para barrer un parámetro sin tocar la sesión — así se encontró que el radio
+efectivo del dock no es el número de la gsetting (21 da la curva de macOS, 18 se
+queda corto).
 
 ```bash
 bash setup/watch-shell.sh          # journal del shell, filtrado, en vivo
@@ -886,7 +912,7 @@ bash setup/gshell.sh push bottom           # empujar un borde hasta la barrera
 bash setup/gshell.sh patch <js> <Clase>     # recargar código sin cerrar sesión
 bash setup/shot.sh --probe 300,0,60        # RGB de una columna: los píxeles
 bash setup/shot.sh --crop 700,980,520,100  # un recorte de la pantalla
-bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless, sin arriesgar
+bash setup/shell-sandbox.sh --shot x.png <uuid>   # GNOME Shell headless + foto
 bash setup/watch-shell.sh                  # journal del shell, filtrado
 ```
 

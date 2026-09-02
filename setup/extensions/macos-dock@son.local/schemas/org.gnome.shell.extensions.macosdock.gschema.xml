@@ -79,7 +79,7 @@
       <description>Hex color for dock background (e.g. #1e1e1e)</description>
     </key>
     <key name="dock-border-radius" type="i">
-      <default>18</default>
+      <default>24</default>
       <summary>Dock border radius</summary>
       <description>Corner radius of the dock in pixels</description>
     </key>

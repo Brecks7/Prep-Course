@@ -49,7 +49,8 @@ bash setup/gshell.sh check                 # ¿unsafe mode prendido?
 bash setup/gshell.sh find macos-dock-root  # un actor del shell, en vivo
 bash setup/gshell.sh push bottom           # empujar un borde (mueve el puntero)
 bash setup/shot.sh --crop 700,980,520,100  # píxeles de verdad
-bash setup/shell-sandbox.sh <uuid>         # GNOME Shell headless
+bash setup/shell-sandbox.sh --shot d.png <uuid>   # el dock, fotografiado sin logout
+setup/bin/medir-dock d.png                 # sus medidas, contra la referencia
 journalctl -b -1 -p err                    # qué pasó en el arranque anterior
 ```
 
