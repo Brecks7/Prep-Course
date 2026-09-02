@@ -175,7 +175,15 @@ bash setup/gshell.sh find macos-dock-root
   del dock de macOS no se puede (el borde va parejo al 16% y quien levanta la
   píldora es el `box-shadow`, que sí se dibuja y el CornerEffect no se come); y
   el radio efectivo no es el número de la gsetting: 21 da la curva de la
-  referencia, 18 se queda corto.
+  referencia, 18 se queda corto. **El aire vertical se rebalanceó el 02/09**
+  después de que el usuario viera los iconos pegados al techo: el arte caía a 15
+  del techo y 11 del piso porque `padTop`/`padBottom` se habían calculado sobre
+  el actor, y el arte se pinta 2 px más abajo (el St.Icon se centra en lo que le
+  deja el iconWrap). Ahora 0.30 y 0.175 del icono dan **14 arriba y 13 abajo**
+  sobre un dock de 67, con el arte en 0.597 del alto. De paso: el hueco de los
+  puntos ahora se reserva siempre —antes el `indicatorBox` se ocultaba y el arte
+  de las apps cerradas bajaba unos píxeles, así que en la misma fila los iconos
+  no estaban a la misma altura—.
 - **El dock se revela, se esconde y no deriva.** Tres bugs, los tres cerrados con
   medición: la barrera mal puesta más `_isAnimating` colgado (diez ciclos, Y de
   reposo en 987 exacto en las diez), los `enter/leave` de la raíz que eran código

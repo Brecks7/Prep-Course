@@ -73,6 +73,13 @@ function medir(ext) {
     for (const child of dm._iconBox.get_children()) {
         const cls = child._isSeparator ? "SEPARADOR" : (child.style_class || "?");
         line(`  [${i++}] ${cls} ${child._appData?.appId ?? ""}`, child);
+        // El arte por separado: lo que se ve no es el actor sino el St.Icon de
+        // adentro, y entre los dos hay centrado y sombra.
+        const data = child._appData;
+        if (data) {
+            line("       arte", data.icon);
+            line("       puntos", data.indicatorBox);
+        }
     }
     const im = dm._iconManager;
     console.log(`${P} iconos=${im.getIconCount()} separadores=${im.getSeparatorCount()} ` +
@@ -86,7 +93,10 @@ function escenificar(ext) {
         const data = actor._appData;
         data.indicatorBox.visible = true;
         data.indicatorBox.remove_all_children();
-        const ventanas = i === 1 ? 2 : 1; // una app con dos ventanas, para ver dos puntos
+        // Una app con dos ventanas (dos puntos) y otra cerrada (ninguno): así la
+        // foto muestra si los iconos quedan alineados entre sí, que es lo que
+        // se rompía cuando el hueco de los puntos no se reservaba.
+        const ventanas = i === 1 ? 2 : (i === 2 ? 0 : 1);
         for (let k = 0; k < ventanas; k++) {
             data.indicatorBox.add_child(new St.Widget({
                 style_class: "macos-dock-indicator-dot",

@@ -37,8 +37,15 @@ export function metrics(iconSize) {
     // El hueco medido es `air + spacing`, así que el spacing es la diferencia.
     const spacing = Math.max(2, r(0.27) - air);
     const padSide = Math.max(4, r(0.23));
-    const padTop = Math.max(4, r(0.33));
-    const padBottom = Math.max(2, r(0.13));
+    // El aire de arriba y el de abajo NO son iguales, y no por gusto: abajo hay
+    // que descontar el bloque de los puntos. Los números salen de despejar dos
+    // condiciones medidas sobre la referencia —el arte ocupa 0.60 del alto del
+    // dock y le queda el mismo aire arriba que abajo— sabiendo que el arte se
+    // pinta 2px más abajo del borde del actor (el St.Icon se centra en lo que
+    // le deja el iconWrap). Con icon 40 dan 12 y 7: arte a 14 del techo y 13
+    // del piso, sobre un dock de 67.
+    const padTop = Math.max(4, r(0.30));
+    const padBottom = Math.max(2, r(0.175));
     return {
         icon,
         air,

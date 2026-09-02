@@ -449,7 +449,12 @@ export class IconManager {
             // El hueco entre el arte y los puntos sale de las proporciones
             // medidas, no de un número fijo en el CSS: si cambia `icon-size`,
             // el punto tiene que bajar con él.
-            data.indicatorBox.style = `spacing: ${this._m.dotSpacing}px; margin-top: ${this._m.iconDotGap}px;`;
+            // La altura va fija y el box no se esconde nunca: si se ocultara,
+            // el BoxLayout le daría 0 y el arte del icono —que se centra en lo
+            // que sobra— bajaría unos píxeles. Resultado: las apps abiertas y
+            // las cerradas quedaban a distinta altura en la misma fila.
+            data.indicatorBox.style =
+                `spacing: ${this._m.dotSpacing}px; margin-top: ${this._m.iconDotGap}px; height: ${this._m.dot}px;`;
         }
         actor.set_size(this._m.actorWidth, this._m.actorHeight);
     }
@@ -558,13 +563,13 @@ export class IconManager {
         if (!indicatorBox)
             return;
         if (!this._runningIndicatorsEnabled) {
-            indicatorBox.visible = false;
+            indicatorBox.remove_all_children();
             return;
         }
         const tracker = Shell.WindowTracker.get_default();
         const app = this._apps.get(appId);
         if (!app) {
-            indicatorBox.visible = false;
+            indicatorBox.remove_all_children();
             return;
         }
         // Count all windows for this app (including minimized).
@@ -581,10 +586,9 @@ export class IconManager {
         const focused = tracker.focus_app === app;
         const isRunning = windowCount > 0 || focused;
         if (!isRunning) {
-            indicatorBox.visible = false;
+            indicatorBox.remove_all_children();
             return;
         }
-        indicatorBox.visible = true;
         // Clear all children before adding new style.
         indicatorBox.remove_all_children();
         if (this._indicatorStyle === 0) {
