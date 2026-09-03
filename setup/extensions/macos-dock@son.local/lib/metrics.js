@@ -39,13 +39,18 @@ export function metrics(iconSize) {
     const padSide = Math.max(4, r(0.23));
     // El aire de arriba y el de abajo NO son iguales, y no por gusto: abajo hay
     // que descontar el bloque de los puntos. Los números salen de despejar dos
-    // condiciones medidas sobre la referencia —el arte ocupa 0.60 del alto del
-    // dock y le queda el mismo aire arriba que abajo— sabiendo que el arte se
-    // pinta 2px más abajo del borde del actor (el St.Icon se centra en lo que
-    // le deja el iconWrap). Con icon 40 dan 12 y 7: arte a 14 del techo y 13
-    // del piso, sobre un dock de 67.
-    const padTop = Math.max(4, r(0.30));
-    const padBottom = Math.max(2, r(0.175));
+    // condiciones medidas sobre la referencia: el arte ocupa 0.60 del alto del
+    // dock y le queda el mismo aire arriba que abajo. Con icon 40 dan 14 y 5:
+    // arte a 14 del techo y a 13 del piso, sobre un dock de 67.
+    //
+    // Eran 12 y 7 mientras el arte se pintaba 2px más abajo del borde del actor
+    // —el St.Icon se centraba en lo que le dejaba el iconWrap y el redondeo caía
+    // para ese lado—. Desde que `_dressIcon()` le fija el tamaño al St.Icon eso
+    // no pasa: el arte cae exactamente en el borde, y compensar de más dejaba el
+    // aire en 12 arriba y 15 abajo (medido). La suma no cambia, así que el alto
+    // del dock y la proporción arte/dock son los mismos de antes.
+    const padTop = Math.max(4, r(0.35));
+    const padBottom = Math.max(2, r(0.125));
     return {
         icon,
         air,

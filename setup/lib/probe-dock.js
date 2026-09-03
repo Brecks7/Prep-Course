@@ -28,13 +28,23 @@ import St from "gi://St";
 const P = "[probe]";
 
 /** Encola el diagnóstico: escenifica, mide, y captura unos segundos después. */
-export function arm(ext, outPath, delay = 5) {
+export function arm(ext, outPath, delay = 5, hover = null) {
     GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, delay, () => {
         intentar("escenificar", () => escenificar(ext));
-        intentar("medir", () => medir(ext));
         global.stage.queue_redraw();
-        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 3, () => {
-            intentar("captura", () => capturar(outPath));
+        // El hover va en otro tick, y no por prolijidad: `escenificar()` mete
+        // hijos nuevos en la fila, así que hasta que el BoxLayout no vuelva a
+        // asignar, `get_x()` de todos vale 0 — y la magnificación, que mide la
+        // distancia del puntero al centro de cada icono, calculaba sobre eso.
+        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+            if (hover !== null)
+                intentar("hover", () => simularHover(ext, hover));
+            intentar("medir", () => medir(ext));
+            global.stage.queue_redraw();
+            GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 2, () => {
+                intentar("captura", () => capturar(outPath));
+                return GLib.SOURCE_REMOVE;
+            });
             return GLib.SOURCE_REMOVE;
         });
         return GLib.SOURCE_REMOVE;
@@ -48,6 +58,32 @@ function intentar(que, fn) {
     catch (e) {
         console.log(`${P} ${que} falló: ${e}`);
     }
+}
+
+/**
+ * Pone la magnificación como si el puntero estuviera sobre el hijo número
+ * `spec` de la fila (admite decimales: 3.5 es justo entre el 3 y el 4).
+ *
+ * En `--headless` no hay puntero, así que sin esto la magnificación no se puede
+ * fotografiar y habría que verificarla a ojo en la sesión real. `applyAt()`
+ * salta el suavizado y deja el estado final de una, que es lo que se quiere
+ * medir: la foto de un estado intermedio no se puede comparar con nada.
+ */
+function simularHover(ext, spec) {
+    const dm = ext._dockManager;
+    const hijos = dm._iconBox.get_children();
+    if (hijos.length === 0)
+        return;
+    const centro = (a) => a.get_x() + a.get_width() / 2;
+    const i = Math.max(0, Math.min(hijos.length - 1, Math.floor(spec)));
+    const j = Math.min(hijos.length - 1, i + 1);
+    const f = spec - i;
+    const localX = centro(hijos[i]) + (centro(hijos[j]) - centro(hijos[i])) * f;
+    const [bx, by] = dm._iconBox.get_transformed_position();
+    const [, bh] = dm._iconBox.get_size();
+    dm._magnification.applyAt(bx + localX, by + bh / 2);
+    console.log(`${P} hover spec=${spec} localX=${localX.toFixed(1)} ` +
+        `puntero=${(bx + localX).toFixed(1)},${(by + bh / 2).toFixed(1)}`);
 }
 
 function line(tag, actor) {
@@ -72,7 +108,9 @@ function medir(ext) {
     let i = 0;
     for (const child of dm._iconBox.get_children()) {
         const cls = child._isSeparator ? "SEPARADOR" : (child.style_class || "?");
-        line(`  [${i++}] ${cls} ${child._appData?.appId ?? ""}`, child);
+        const art = child._magActor ?? child;
+        const mag = `escala=${art.scale_x.toFixed(3)} tx=${child.translation_x.toFixed(1)}`;
+        line(`  [${i++}] ${cls} ${child._appData?.appId ?? ""} ${mag}`, child);
         // El arte por separado: lo que se ve no es el actor sino el St.Icon de
         // adentro, y entre los dos hay centrado y sombra.
         const data = child._appData;
@@ -82,6 +120,13 @@ function medir(ext) {
         }
     }
     const im = dm._iconManager;
+    // El arte de los dos botones va aparte: no tienen `_appData`, así que el
+    // recorrido de arriba no los mira, y son justo los que había que igualar en
+    // línea base con los iconos de app.
+    if (im._appButtonIcon)
+        line("  arte botón apps", im._appButtonIcon);
+    if (im._trashIcon)
+        line("  arte papelera", im._trashIcon);
     console.log(`${P} iconos=${im.getIconCount()} separadores=${im.getSeparatorCount()} ` +
         `botones=${im.getButtonCount()} papelera=${im._trashIcon?.icon_name}`);
 }

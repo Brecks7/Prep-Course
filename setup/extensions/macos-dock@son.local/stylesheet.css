@@ -42,9 +42,11 @@
 
 /* El spacing y el margen los pone _applyIconSize() desde lib/metrics.js: los
  * puntos tienen que bajar y separarse cuando crece `icon-size`. */
+/* El hueco y el alto los pone _applyIconSize() desde lib/metrics.js, para que
+ * acompañen a `icon-size`. Acá no va nada de geometría: mientras estuvo, este
+ * `margin-top: 3px` era el que en realidad separaba el punto del arte, y el
+ * cálculo derivado no llegaba a aplicarse nunca. */
 .macos-dock-indicator-box {
-  spacing: 4px;
-  margin-top: 3px;
 }
 
 /* Ancho, alto y radio salen del estilo inline (lib/metrics.js). Acá sólo el

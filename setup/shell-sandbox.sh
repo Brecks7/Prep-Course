@@ -13,6 +13,11 @@
 #   bash setup/shell-sandbox.sh mactahoe-tweaks@son.local
 #   bash setup/shell-sandbox.sh --seconds 20 mactahoe-tweaks@son.local macos-dock@son.local
 #   bash setup/shell-sandbox.sh --shot /tmp/dock.png macos-dock@son.local
+#   bash setup/shell-sandbox.sh --shot /tmp/dock.png --hover 3 macos-dock@son.local
+#
+# `--hover N` fotografía la magnificación: pone el puntero (simulado, en
+# headless no hay) sobre el hijo número N de la fila. Admite decimales — 3.5 es
+# justo entre dos iconos, que es donde se veía el salto de la versión vieja.
 #
 # `--shot` saca una captura del dock ahí adentro y le pasa las medidas a
 # `bin/medir-dock`. Es lo que evita el logout por iteración: GNOME 50 no recarga
@@ -39,12 +44,14 @@ source "$SCRIPT_DIR/lib/common.sh"
 SEGUNDOS=12
 UUIDS=()
 SHOT=""
+HOVER=""
 OVERRIDES=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --seconds) SEGUNDOS="$2"; shift 2 ;;
         --shot)    SHOT="$2"; shift 2 ;;
         --set)     OVERRIDES+=("$2"); shift 2 ;;
+        --hover)   HOVER="$2"; shift 2 ;;
         -h|--help) sed -n '2,22p' "$0" | sed 's/^# \?//'; exit 0 ;;
         *) UUIDS+=("$1"); shift ;;
     esac
@@ -100,7 +107,7 @@ if [[ -n "$SHOT" ]]; then
     else
         cp "$SCRIPT_DIR/lib/probe-dock.js" "$EXT_DIR/$probe_uuid/probe-dock.js"
         python3 "$SCRIPT_DIR/lib/enganchar-probe.py" \
-            "$EXT_DIR/$probe_uuid/extension.js" "$SHOT" || exit 1
+            "$EXT_DIR/$probe_uuid/extension.js" "$SHOT" ${HOVER:+"$HOVER"} || exit 1
         # El dconf del sandbox se compila antes de arrancar: pasarlo por
         # `gsettings` adentro del `bash -c` no sirve, el quoting se come los
         # overrides y la corrida sale con los defaults sin avisar.

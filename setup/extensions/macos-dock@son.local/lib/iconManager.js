@@ -20,6 +20,8 @@ export class IconManager {
     _signals;
     _container;
     _iconSize;
+    /** Múltiplo al que se rasteriza el arte. Ver `_dressIcon()`. */
+    _quality = 2;
     _runningIndicatorsEnabled;
     _indicatorStyle; // 0 = dots per window, 1 = horizontal bar
     _onClicked = null;
@@ -44,10 +46,11 @@ export class IconManager {
     _showTrash = true;
     _badges = new Badges();
     _m;
-    constructor(container, iconSize, runningIndicatorsEnabled, _quality = 2, indicatorStyle = 0) {
+    constructor(container, iconSize, runningIndicatorsEnabled, quality = 2, indicatorStyle = 0) {
         this._signals = new SignalManager();
         this._container = container;
         this._iconSize = iconSize;
+        this._quality = Math.max(1, quality || 1);
         this._m = metrics(iconSize);
         this._runningIndicatorsEnabled = runningIndicatorsEnabled;
         this._indicatorStyle = indicatorStyle;
@@ -69,8 +72,10 @@ export class IconManager {
                 button.set_size(this._m.actorWidth, this._m.actorHeight);
         }
         for (const icon of [this._appButtonIcon, this._trashIcon]) {
-            if (icon)
-                icon.set_icon_size(this._iconSize);
+            this._dressIcon(icon);
+        }
+        for (const button of [this._appButton, this._trashButton]) {
+            this._sizeButtonWrap(button);
         }
         for (const separator of [this._separator, this._trashSeparator]) {
             this._styleSeparator(separator);
@@ -78,10 +83,71 @@ export class IconManager {
         this._refreshAllIndicators();
         this._refreshAllBadges();
     }
-    setQuality(_quality) {
+    setQuality(quality) {
+        this._quality = Math.max(1, quality || 1);
         for (const actor of this._icons.values()) {
             this._applyIconSize(actor);
         }
+        for (const icon of [this._appButtonIcon, this._trashIcon]) {
+            this._dressIcon(icon);
+        }
+    }
+    /**
+     * Le da al St.Icon su tamaño en pantalla y la resolución con la que se
+     * rasteriza, que no son lo mismo.
+     *
+     * Este es el arreglo de «se ven los píxeles». `icon_size` es lo que St le
+     * pide al tema —y con un tema de SVG, a qué tamaño lo rasteriza librsvg—,
+     * mientras que `set_size()` es lo que ocupa en el layout. Pidiendo el arte a
+     * `icon-size × calidad` y dibujándolo en `icon-size`, la magnificación
+     * amplía una textura que ya está por encima del tamaño final: a 1.3× sobre
+     * iconos de 40 se dibujan 52 px desde una fuente de 80, o sea que siempre
+     * se reduce y nunca se estira. Antes la fuente eran 40 px y el 1.3× era
+     * interpolación pura: de ahí el aspecto de baja resolución.
+     *
+     * Es barato: `St.TextureCache` cachea por (gicon, tamaño) y los tamaños son
+     * dos, no uno por frame. Lo que no se puede es cambiar `icon_size` en cada
+     * tick de la animación — eso llenaría la caché de texturas distintas.
+     */
+    /**
+     * Le da al botón de aplicaciones y a la papelera la misma estructura que un
+     * icono de app: el arte en un envoltorio propio y, debajo, el hueco que en
+     * los iconos ocupan los puntos de app viva.
+     *
+     * Son dos cosas en una. En reposo iguala la línea base —un St.Icon suelto en
+     * un BoxLayout de altura `actorHeight` se centra en todo el alto, así que su
+     * arte caía unos píxeles más abajo que el de los iconos, que se centran sólo
+     * en lo que les deja el hueco de los puntos—. Y al magnificar hace que los
+     * tres crezcan desde la misma línea, porque el pivote de la escala es el
+     * borde de abajo del envoltorio y no el del actor.
+     */
+    _dressButton(button, icon) {
+        const wrap = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_expand: true,
+            y_expand: true,
+        });
+        wrap.add_child(icon);
+        button.add_child(wrap);
+        const gap = new St.Widget();
+        button.add_child(gap);
+        button._magActor = wrap;
+        button._indicatorGap = gap;
+        this._sizeButtonWrap(button);
+    }
+    /** El hueco de abajo, en las proporciones de ahora. Ver lib/metrics.js. */
+    _sizeButtonWrap(button) {
+        if (!button?._indicatorGap)
+            return;
+        button.set_size(this._m.actorWidth, this._m.actorHeight);
+        button._indicatorGap.style =
+            `margin-top: ${this._m.iconDotGap}px; height: ${this._m.dot}px;`;
+    }
+    _dressIcon(icon) {
+        if (!icon)
+            return;
+        icon.set_icon_size(Math.round(this._iconSize * this._quality));
+        icon.set_size(this._iconSize, this._iconSize);
     }
     setIndicatorStyle(style) {
         this._indicatorStyle = style;
@@ -351,14 +417,13 @@ export class IconManager {
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.FILL,
         });
-        this._applyIconSize(actor);
         const icon = new St.Icon({
             gicon: app.get_icon(),
-            icon_size: this._iconSize,
             style_class: "macos-dock-icon-gicon",
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._dressIcon(icon);
         // El arte y el globo comparten celda: BinLayout los apila, así el
         // globo queda sobre la esquina del icono sin empujar la fila.
         const iconWrap = new St.Widget({
@@ -383,6 +448,10 @@ export class IconManager {
         });
         iconWrap.add_child(badge);
         actor.add_child(iconWrap);
+        // Lo que la magnificación escala. Es el arte y el globo, no el actor
+        // entero: el punto de app viva se queda quieto en la base, como en
+        // macOS, en vez de subir con el icono.
+        actor._magActor = iconWrap;
         // Container for running indicator dots (or a single bar).
         const indicatorBox = new St.BoxLayout({
             style_class: "macos-dock-indicator-box",
@@ -393,6 +462,13 @@ export class IconManager {
         // Store references on the actor for retrieval later.
         const appData = { appId, icon, indicatorBox, badge, dots: [] };
         actor._appData = appData;
+        // Recién acá, y no arriba con el resto de la construcción: la mitad de
+        // `_applyIconSize()` trabaja sobre `actor._appData`, así que llamándolo
+        // antes de asignarlo esa mitad no corría. El hueco de los puntos se
+        // quedaba con el `margin-top: 3px` fijo del stylesheet en vez de salir
+        // de las proporciones, y los iconos sin ventanas abiertas caían 2px por
+        // debajo de los demás.
+        this._applyIconSize(actor);
         this._signals.connect(actor, "button-press-event", (_actor, event) => {
             const button = event.get_button();
             if (button === 3) {
@@ -445,7 +521,7 @@ export class IconManager {
     _applyIconSize(actor) {
         const data = this._getStored(actor);
         if (data) {
-            data.icon.set_icon_size(this._iconSize);
+            this._dressIcon(data.icon);
             // El hueco entre el arte y los puntos sale de las proporciones
             // medidas, no de un número fijo en el CSS: si cambia `icon-size`,
             // el punto tiene que bajar con él.
@@ -453,8 +529,16 @@ export class IconManager {
             // el BoxLayout le daría 0 y el arte del icono —que se centra en lo
             // que sobra— bajaría unos píxeles. Resultado: las apps abiertas y
             // las cerradas quedaban a distinta altura en la misma fila.
+            //
+            // Y se reserva el bloque entero —hueco más punto— con `set_height()`
+            // y un `padding-top`, no con `height` + `margin-top` del CSS: un box
+            // **sin hijos** —una app sin ventanas abiertas— medía 0x0 con el
+            // height del CSS, y con el height fijo seguía perdiendo el margen.
+            // Las dos veces el arte de esos iconos caía 2px más abajo que el de
+            // los que sí tenían punto (medido en el sandbox: 1017 contra 1015).
             data.indicatorBox.style =
-                `spacing: ${this._m.dotSpacing}px; margin-top: ${this._m.iconDotGap}px; height: ${this._m.dot}px;`;
+                `spacing: ${this._m.dotSpacing}px; padding-top: ${this._m.iconDotGap}px;`;
+            data.indicatorBox.set_height(this._m.iconDotGap + this._m.dot);
         }
         actor.set_size(this._m.actorWidth, this._m.actorHeight);
     }
@@ -836,10 +920,12 @@ export class IconManager {
         });
         this._appButtonIcon = new St.Icon({
             icon_name: "view-app-grid-symbolic",
-            icon_size: this._iconSize,
             style_class: "macos-dock-app-button-icon",
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
         });
-        this._appButton.add_child(this._appButtonIcon);
+        this._dressIcon(this._appButtonIcon);
+        this._dressButton(this._appButton, this._appButtonIcon);
         this._appButton.connect("button-press-event", () => {
             if (Main.overview.visible) {
                 Main.overview.hide();
@@ -892,10 +978,12 @@ export class IconManager {
         });
         this._trashIcon = new St.Icon({
             icon_name: "user-trash",
-            icon_size: this._iconSize,
             style_class: "macos-dock-app-button-icon",
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
         });
-        this._trashButton.add_child(this._trashIcon);
+        this._dressIcon(this._trashIcon);
+        this._dressButton(this._trashButton, this._trashIcon);
         this._signals.connect(this._trashButton, "button-press-event", (_actor, event) => {
             if (event.get_button() === 3) {
                 this._showMenu(this._trashButton, [

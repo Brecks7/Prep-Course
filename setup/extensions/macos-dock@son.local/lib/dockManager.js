@@ -31,6 +31,10 @@ export class DockManager {
     _originalDashVisible;
     _dockPosition = POSITIONS.BOTTOM;
     _blurEffect = null;
+    /** Geometría de reposo del rectángulo. La llena `_updatePosition()`. */
+    _rest = null;
+    /** Píxeles que el fondo tiene de más ahora mismo. Ver `_applyStretch()`. */
+    _stretch = 0;
     static MARGIN_BOTTOM = 12;
     static MIN_DOCK_WIDTH = 300;
     static LAUNCH_DEBOUNCE_MS = 400;
@@ -63,6 +67,25 @@ export class DockManager {
             return 0;
         const scale = Math.max(1, this._settings.get_double("magnification-scale"));
         return Math.ceil(this._iconActorHeight * (scale - 1));
+    }
+    /**
+     * Lo mismo, pero a los costados: cuando la onda pasa, los iconos se apartan
+     * y el rectángulo del fondo se ensancha (ver lib/magnification.js). Ese
+     * crecimiento sale del contenedor raíz, así que hay que reservarlo o el
+     * fondo queda cortado por la asignación.
+     *
+     * La cota: el crecimiento total es la suma de `ancho·(escala-1)` sobre los
+     * iconos que la onda alcanza, y como la integral de la campana sobre su
+     * alcance vale justo `falloff`, `(escala-1)·falloff` la acota holgadamente
+     * (los iconos no llenan el eje: hay `spacing` entre ellos). Se reparte mitad
+     * y mitad, y esto es lo que va de cada lado.
+     */
+    get _magnificationSideroom() {
+        if (!this._settings?.get_boolean("magnification-enabled"))
+            return 0;
+        const scale = Math.max(1, this._settings.get_double("magnification-scale"));
+        const falloff = Math.max(1, this._settings.get_int("magnification-falloff"));
+        return Math.ceil((scale - 1) * falloff);
     }
     enable(settings) {
         this._settings = settings;
@@ -110,6 +133,7 @@ export class DockManager {
         this._iconManager.start();
         // Magnification: scale icons on hover.
         this._magnification = new Magnification(this._iconBox, settings.get_boolean("magnification-enabled"), settings.get_double("magnification-scale"), settings.get_int("magnification-falloff"), settings.get_int("magnification-framerate"));
+        this._magnification.setOnStretch((extra) => this._applyStretch(extra));
         this._magnification.start();
         this._applyDockStyle();
         this._applyDockPosition();
@@ -410,6 +434,7 @@ export class DockManager {
         const dockAxisSize = Math.max(contentSize + 2 * m.padSide, DockManager.MIN_DOCK_WIDTH);
         const thickness = this._dockHeight;
         const headroom = this._magnificationHeadroom;
+        const sideroom = this._magnificationSideroom;
         const margin = DockManager.MARGIN_BOTTOM;
         // Rectángulo visible (lo que el usuario llama "el rectángulo gris").
         let rectX = 0, rectY = 0, rectW = 0, rectH = 0;
@@ -424,8 +449,9 @@ export class DockManager {
                 rectH = thickness;
                 rectX = monitor.x + Math.floor((monitor.width - rectW) / 2);
                 rectY = monitor.y + monitor.height - rectH - margin;
-                containerW = rectW;
+                containerW = rectW + 2 * sideroom;
                 containerH = rectH + headroom;
+                offsetX = sideroom; // se apartan hacia los dos lados
                 offsetY = headroom; // crecen hacia arriba
                 break;
             case POSITIONS.TOP:
@@ -433,8 +459,9 @@ export class DockManager {
                 rectH = thickness;
                 rectX = monitor.x + Math.floor((monitor.width - rectW) / 2);
                 rectY = monitor.y + margin;
-                containerW = rectW;
+                containerW = rectW + 2 * sideroom;
                 containerH = rectH + headroom;
+                offsetX = sideroom; // se apartan hacia los dos lados
                 offsetY = 0; // crecen hacia abajo
                 break;
             case POSITIONS.LEFT:
@@ -462,6 +489,10 @@ export class DockManager {
             child.set_size(rectW, rectH);
             child.set_position(offsetX, offsetY);
         }
+        // La geometría de reposo, para que `_applyStretch()` pueda ensanchar el
+        // fondo en cada tick sin volver a calcular todo esto.
+        this._rest = { rectW, rectH, offsetX, offsetY };
+        this._stretch = 0;
         this._updateCornerGeometry(rectW, rectH);
         if (this._visibility) {
             this._visibility.updateShownY(rectY - offsetY);
@@ -476,6 +507,33 @@ export class DockManager {
         // dónde quedaron, o la animación de minimizar apunta al lugar viejo (y
         // si nadie la publicó nunca, al (0,0) de la esquina superior izquierda).
         this._iconManager?.queuePublishIconGeometries();
+    }
+    /**
+     * Ensancha el rectángulo del fondo `extra` píxeles, mitad para cada lado.
+     *
+     * Es la contraparte del reflow: cuando la onda aparta los iconos, la fila
+     * ocupa más de lo que ocupa en reposo, y si el fondo no acompaña los de los
+     * extremos se salen de la píldora. En macOS el dock se ensancha igual.
+     *
+     * Va por el camino corto —dos llamadas al actor y los uniforms del shader—
+     * porque esto corre a 60 fps: nada de barreras de presión, intellihide ni
+     * geometrías de minimizado, que sólo dependen del rectángulo en reposo.
+     */
+    _applyStretch(extra) {
+        if (!this._background || !this._rest)
+            return;
+        if (this._dockPosition !== POSITIONS.BOTTOM && this._dockPosition !== POSITIONS.TOP)
+            return;
+        const room = this._magnificationSideroom;
+        const grow = Math.max(0, Math.min(Math.round(extra), 2 * room));
+        if (grow === this._stretch)
+            return;
+        this._stretch = grow;
+        const { rectW, rectH, offsetX, offsetY } = this._rest;
+        const half = Math.round(grow / 2);
+        this._background.set_size(rectW + grow, rectH);
+        this._background.set_position(offsetX - half, offsetY);
+        this._updateCornerGeometry(rectW + grow, rectH);
     }
     _hideDefaultDash() {
         const dash = Main.overview.dash;
