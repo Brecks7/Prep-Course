@@ -1131,3 +1131,99 @@ local porque lo escribe así Windows, y Ubuntu lo corrige tres segundos después
 arrancar. Es la razón de que las primeras líneas de cada boot aparezcan con tres
 horas de más en `journalctl`, y no tiene nada que ver con el RGB. Funciona, pero
 conviene saberlo antes de leer timestamps tempranos.
+
+
+## El dock — la magnificación, rehecha contra la sesión viva (2 de septiembre)
+
+El síntoma que lo abrió, en palabras del usuario: «al pasar el mouse por encima
+el mismo se desplaza hacia arriba, simulando el estilo de mac, pero el efecto no
+está integrado, sin la necesidad de acercarte lo suficiente el icono se desplaza
+hacia arriba», y además «lo noto a baja resolución, se notan los píxeles».
+
+Lo primero fue medir en vez de leer el CSS, con `gshell.sh pointer` para poner el
+puntero y `gshell.sh eval` para leer la escala de cada actor:
+
+| puntero | icono bajo el cursor | vecinos | `translation_x` |
+|---|---|---|---|
+| encima del dock (888,1030) | 1.300 | 1.146 / 1.146 | 0 |
+| **82 px por encima** (888,920) | **1.300** | 1.146 / 1.146 | 0 |
+
+Los dos estados idénticos. Cinco causas, todas confirmadas con números:
+
+1. **La banda activa usaba `falloff` como alcance vertical.** Con `falloff` en
+   100, el corte era `localY < -100`: 82 px de aire por encima del dock seguían
+   contando como «encima». Eso es lo que se veía como «se levanta sin acercarte».
+   Ahora la banda es el rectángulo del dock más lo que asoma el icono grande.
+
+2. **La campana se centraba en el icono, no en el puntero.** El código elegía un
+   «focal» —el icono más cercano— y medía las distancias contra *su* centro. Se
+   ve en la tabla: con el puntero en x=194 local, el icono de la izquierda a
+   49 px y el de la derecha a 41 px recibían **la misma** escala. Consecuencia:
+   dentro de un icono no pasaba nada y al cruzar el borde la onda entera saltaba
+   51 px de golpe. De ahí lo de «no está integrado».
+
+3. **No había reflow.** Con `icon-size` 40 el paso es 51 px y un icono al 1.3
+   mide 57: se montaban entre ellos. El reparto que se implementó: cada icono que
+   crece `Δ = w·(s-1)` empuja a los de su derecha por `Δ` y a sí mismo por `Δ/2`,
+   y a todos se les resta la mitad del crecimiento total. Así el icono bajo el
+   cursor no se mueve, los vecinos se abren simétricos y el fondo crece lo mismo.
+
+4. **`icon-quality` era letra muerta.** Estaba en el schema y en `prefs.js`, pero
+   el constructor del `IconManager` recibía `_quality` y no lo guardaba, y
+   `setQuality()` no hacía nada con él. El arte se rasterizaba a 40 px y la
+   magnificación lo estiraba: interpolación pura. Con el arte pedido a 80 px y
+   dibujado a 40, la varianza del laplaciano —la métrica clásica de foco— sube
+   **+2,9× en el icono magnificado y +4,2× en reposo**. El icono en reposo
+   también mejora porque 80 → 40 es supersampling.
+
+5. **`_applyIconSize()` se llamaba antes de asignar `actor._appData`**, así que
+   toda su rama `if (data)` era código muerto al crear un icono. El hueco de los
+   puntos venía del `margin-top: 3px` fijo del stylesheet y no de `metrics.js`, y
+   un icono sin ventanas abiertas quedaba 2 px más abajo que el resto (1017
+   contra 1015).
+
+### Lo que costó una corrida cada uno
+
+- **`get_x()` no es la posición asignada.** Devuelve **0** mientras el actor
+  tiene la asignación marcada como pendiente, aunque la caja ya esté calculada:
+  medido en vivo, `get_x()` daba `0,0,0,0` y `get_allocation_box().x1` daba
+  `9,60,111,162`. Con ceros todos los iconos caen en el mismo centro y la
+  magnificación se apaga entera. La geometría va por `get_allocation_box()`.
+
+- **Un actor recién agregado trae la caja inválida de Clutter**, con ±Infinity.
+  Pasa de verdad: abrís una app con el cursor en el dock y el icono nuevo todavía
+  no se asignó. Los infinitos se propagaban al crecimiento total, de ahí a todos
+  los `translation_x` y al ancho del fondo — **el rectángulo del dock se caía a
+  2 px de ancho**. El frame se descarta y se reintenta en el tick siguiente.
+
+- **El `motion-event` del stage no alcanza para volver atrás.** En Wayland deja
+  de llegar en cuanto el puntero entra en la ventana de un cliente, así que
+  sacando el cursor del dock hacia arriba no llegaba ningún evento y los iconos
+  se quedaban agrandados (medido: a 46 px por encima seguía en
+  1.05/1.30/1.45/1.30/1.05). El bucle ya no se suelta mientras quede algo fuera
+  de reposo; cuando todo vuelve a 1.0, el timer se apaga igual que antes.
+
+- **`gshell.sh patch` no copiaba getters.** Filtraba descriptores por
+  `typeof d.value === 'function'`, y un accessor tiene `get`/`set`, no `value`.
+  Resultado: el parche decía «recargado» y dejaba los getters viejos. Un
+  `get _magnificationSideroom()` recién agregado simplemente no existía en la
+  clase viva y devolvía `undefined`, con lo que el contenedor del dock quedó en
+  **0 px de ancho**. Ya copia métodos y accessors.
+
+- **`patch` tampoco toca el constructor**, así que una instancia creada después
+  del parche sale con los campos de clase viejos (`_states` no existía y
+  `_stateOf()` explotaba en cada tick). Al recargar en caliente hay que ponerlos
+  a mano; en un login limpio no hace falta.
+
+### Cómo se verificó
+
+`shell-sandbox.sh --hover N` fotografía la magnificación sin cerrar sesión: en
+headless no hay puntero, así que el probe llama a `Magnification.applyAt()`, que
+deja el estado final sin suavizado. Con eso se compararon 1.3/100, 1.45/130 y
+1.6/150 —se eligió 1.45/130 porque 1.6 agranda medio dock a la vez y el efecto se
+pierde— y se comprobó que el reposo sigue midiendo lo mismo que la versión
+aprobada el 02/09 (dock 511×71, radio ~17, paso 53, puntos ⌀3).
+
+En la sesión viva: `patch` de las tres clases, `disable()`/`enable()` por Eval y
+un barrido de 11 posiciones a lo ancho y 7 a lo alto sin un solo error nuevo en
+el journal.

@@ -30,29 +30,22 @@ claves SSH, así que `git push` muere con `could not read Username for
 (interactivo, **lo corre la persona**), o con una clave SSH y el remoto en
 `git@github.com:`.
 
-**El dock nuevo está medido y aprobado en el sandbox; falta verlo en la sesión
-real.** El shell vivo sigue corriendo el código viejo y va a seguir así hasta el
-próximo login: GNOME 50 no recarga el JS de una extensión, `_callExtensionEnable`
-reusa el `stateObj` que ya tiene en memoria (verificado leyendo
-`extensionSystem.js` del gresource). Lo único que sí se recarga en un
-disable/enable es el `stylesheet.css`.
-
-Al volver a entrar, alcanza con mirar el dock. Si algo no cierra:
-
-```bash
-bash setup/shell-sandbox.sh --shot /tmp/dock.png macos-dock@son.local
-setup/bin/medir-dock ~/Descargas/DOCK.png     # la referencia, mismo criterio
-```
+**El dock está cerrado: medido en el sandbox y verificado en la sesión viva**
+—magnificación, nitidez del arte y reposo—, ver «Qué funciona». La sesión de hoy
+corre el código nuevo sin haber cerrado sesión: `gshell.sh patch` de las tres
+clases más un `disable()`/`enable()` por Eval. Eso deja un detalle: `patch` copia
+el prototipo y **no el constructor**, así que los campos de clase nuevos hubo que
+ponerlos a mano (`_states`, `_stretch`, `_atRest`). En un login limpio no hace
+falta nada de eso.
 
 Revertir todo el estilo: `~/.setup-ubuntu-backups/dock-antes-20260902.sh`.
 
-**Falta un login limpio para el dock.** Los dos arreglos del 31/08 —umbral de
-revelado y ciclado del clic— están verificados, pero la sesión viva quedó con una
-barrera de presión huérfana (GNOME marcó `macos-dock` INACTIVE al detectar los
-archivos cambiados y no corrió su `disable()`), así que ahí ya no se puede medir el
-revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox sí
-es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo y los
-tres clics sobre el icono de la terminal.
+**Falta un login limpio para medir el revelado.** Los dos arreglos del 31/08
+—umbral de revelado y ciclado del clic— están verificados, pero la sesión viva
+quedó con una barrera de presión huérfana, así que ahí no se puede medir el
+revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
+sí es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo
+y los tres clics sobre el icono de la terminal.
 
 **El RGB está cerrado entero, tiras incluidas, y el restore al arrancar también**
 — ver «Qué funciona». No queda nada pendiente de este tema.
@@ -64,7 +57,13 @@ Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true
 bash setup/gshell.sh check          # unsafe mode: Alt+F2 → lg → global.context.unsafe_mode = true
 bash setup/gshell.sh push bottom
 bash setup/gshell.sh find macos-dock-root
+bash setup/gshell.sh pointer 888 1030            # el puntero sobre un icono
+bash setup/shell-sandbox.sh --shot /tmp/d.png --hover 3 macos-dock@son.local
 ```
+
+`--hover N` fotografía la magnificación en el sandbox: en headless no hay
+puntero, así que el probe llama a `applyAt()`, que deja el estado final sin
+suavizado. Admite decimales (3.5 es justo entre dos iconos).
 
 ## Qué funciona, verificado
 
@@ -184,6 +183,19 @@ bash setup/gshell.sh find macos-dock-root
   puntos ahora se reserva siempre —antes el `indicatorBox` se ocultaba y el arte
   de las apps cerradas bajaba unos píxeles, así que en la misma fila los iconos
   no estaban a la misma altura—.
+- **La magnificación es la de macOS y el arte dejó de verse pixelado** (02/09,
+  medido en la sesión viva y en el sandbox). La ola sigue al puntero en vez de
+  saltar de icono en icono, sólo se activa con el cursor sobre el dock —activa a
+  16 px por encima, apagada a 46— y los iconos se apartan mientras el fondo se
+  ensancha (511 → 562 px). Los ajustes son **escala 1.45, alcance 130,
+  framerate 120**: 1.3 casi no se nota y 1.6 agranda medio dock a la vez. La
+  nitidez salió de hacer funcionar `icon-quality`, que estaba en el schema pero
+  el `IconManager` ignoraba: el arte se pide a `icon-size × calidad` y se dibuja
+  a `icon-size`, así que siempre se reduce. **+2,9× de detalle en el icono
+  magnificado y +4,2× en reposo** (varianza del laplaciano). De paso, los nueve
+  artes de la fila quedaron a la misma altura —botón de aplicaciones y papelera
+  incluidos— y `metrics.js` se rebalanceó a padTop/padBottom 14 y 5 sin cambiar
+  el alto del dock. Los cinco síntomas, con números, en `ESTADO-historial.md`.
 - **El dock se revela, se esconde y no deriva.** Tres bugs, los tres cerrados con
   medición: la barrera mal puesta más `_isAnimating` colgado (diez ciclos, Y de
   reposo en 987 exacto en las diez), los `enter/leave` de la raíz que eran código
@@ -255,8 +267,9 @@ bash setup/gshell.sh find macos-dock-root
   ellas 5 de seguridad, ya están aplicadas.
 - **Ruido en el journal**, sin síntoma visible, sin mirar: PaperWM
   (`Meta.BackgroundActor ... already disposed`, en `utils.js:567` / `grab.js:441`)
-  y `macos-dock` (`lib/iconManager.js:474` ← `:374` ← `:263`, `dockManager.js:390-394`,
-  `_applyDockPosition()` `:497`).
+  y `macos-dock` (`lib/iconManager.js`, `dockManager.js` `_applyDockPosition()`).
+  Se vuelve a ver en cada `enable()`; un barrido completo del dock con el puntero
+  (11 posiciones a lo ancho, 7 a lo alto) no agregó ni un error.
 - **`auto-hide` aparece en `false` al arrancar la sesión** aunque se lo haya
   dejado en `true`. No se investigó si lo pisa el reinicio o el arranque de la
   extensión. Cuesta una sesión: sin auto-hide no hay `DockVisibility`, así que
