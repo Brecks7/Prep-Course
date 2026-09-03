@@ -525,6 +525,11 @@ export class DockManager {
         if (this._dockPosition !== POSITIONS.BOTTOM && this._dockPosition !== POSITIONS.TOP)
             return;
         const room = this._magnificationSideroom;
+        // El clamp incluye descartar lo que no sea un número: un ancho NaN no
+        // deja el fondo como está, lo colapsa (medido: el rectángulo pasó a 2px
+        // de ancho).
+        if (!Number.isFinite(extra))
+            return;
         const grow = Math.max(0, Math.min(Math.round(extra), 2 * room));
         if (grow === this._stretch)
             return;

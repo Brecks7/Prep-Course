@@ -62,6 +62,22 @@ export class Magnification {
     _onStretch = null;
     _stretch = 0;
     /**
+     * Si la fila está en reposo (todo en escala 1 y sin desplazar).
+     *
+     * Existe para no depender del `motion-event` para volver atrás. En Wayland
+     * el stage deja de recibir motion en cuanto el puntero entra en una ventana
+     * de un cliente, así que sacando el cursor del dock hacia arriba —hacia la
+     * ventana que haya— no llegaba ningún evento y los iconos se quedaban
+     * agrandados hasta el próximo movimiento sobre el chrome del shell. Medido:
+     * con el puntero a 46 px por encima del dock el estado seguía siendo
+     * 1.05/1.30/1.45/1.30/1.05.
+     *
+     * Con esto el bucle no se suelta mientras quede algo fuera de reposo: sigue
+     * mirando dónde está el puntero por su cuenta y relaja cuando corresponde.
+     * Cuando todo volvió a 1.0 el timer se apaga igual que antes.
+     */
+    _atRest = true;
+    /**
      * Escala y desplazamiento actuales por icono.
      *
      * Antes era un array indexado por posición. El bug: cuando se abría o
@@ -179,7 +195,8 @@ export class Magnification {
         if (!this._container.visible)
             return this._relax();
         const [px, py] = global.get_pointer();
-        return this._computeAndApply(px, py, false);
+        const pending = this._computeAndApply(px, py, false);
+        return pending || !this._atRest;
     }
     /**
      * Cuánto crece un icono que está a `distance` píxeles del puntero.
@@ -210,7 +227,24 @@ export class Magnification {
         // responde al cursor, porque el icono grande está ahí). Ni un píxel más:
         // el bug que se veía como «se levanta sin acercarte» era justamente que
         // esta condición usaba `falloff` —100 px— como alcance vertical.
-        const rise = Math.ceil(children[0].get_height() * (this._maxScale - MIN_SCALE));
+        // La geometría de cada hijo sale de `get_allocation_box()` y no de
+        // `get_x()` / `get_width()`. No es lo mismo: `get_x()` devuelve **0**
+        // mientras el actor tiene la asignación marcada como pendiente, aunque
+        // la caja ya esté calculada (medido en la sesión viva: get_x() daba
+        // 0,0,0,0 y la asignación 9,60,111,162). Con ceros todos los iconos
+        // caen en el mismo centro y la magnificación se apaga entera.
+        const cajas = children.map((c) => c.get_allocation_box());
+        // Un actor que todavía no se asignó —el icono de una app que se acaba
+        // de abrir, hasta el layout siguiente— trae la caja inválida de Clutter,
+        // con ±Infinity adentro. Sin este corte esos infinitos se propagaban:
+        // el crecimiento total daba NaN, todos los `translation_x` quedaban en
+        // NaN y el ancho del fondo también, con lo que el rectángulo del dock
+        // se caía a 2px. Devolvemos `true` para reintentar en el tick que viene,
+        // que es cuando la asignación ya está.
+        if (!cajas.every((c) => Number.isFinite(c.x1) && Number.isFinite(c.x2) &&
+            Number.isFinite(c.y1) && Number.isFinite(c.y2)))
+            return true;
+        const rise = Math.ceil((cajas[0].y2 - cajas[0].y1) * (this._maxScale - MIN_SCALE));
         const inside = localY >= -rise - EDGE_SLACK &&
             localY <= dh + EDGE_SLACK &&
             localX >= -EDGE_SLACK &&
@@ -222,13 +256,15 @@ export class Magnification {
         // no toca porque va por translation_x).
         const widths = [];
         const targets = [];
-        for (const child of children) {
-            const w = child.get_width();
-            const center = child.get_x() + w / 2;
+        for (let i = 0; i < children.length; i++) {
+            const w = cajas[i].x2 - cajas[i].x1;
+            const center = cajas[i].x1 + w / 2;
             widths.push(w);
             // Los separadores no se magnifican —una línea que se estira se ve
             // mal y en macOS no pasa— pero sí se corren con el resto.
-            targets.push(child._isSeparator ? MIN_SCALE : this._scaleFor(Math.abs(localX - center)));
+            targets.push(children[i]._isSeparator
+                ? MIN_SCALE
+                : this._scaleFor(Math.abs(localX - center)));
         }
         let pending = false;
         // Suavizado primero: el reflow tiene que calcularse sobre las escalas
@@ -262,6 +298,7 @@ export class Magnification {
             this._paint(child, state);
         }
         this._publishStretch(growth);
+        this._atRest = false;
         return pending;
     }
     _stateOf(child) {
@@ -300,6 +337,8 @@ export class Magnification {
         child.translation_x = state.shift;
     }
     _publishStretch(growth) {
+        if (!Number.isFinite(growth))
+            return;
         const rounded = Math.round(growth);
         if (rounded === this._stretch)
             return;
@@ -309,6 +348,7 @@ export class Magnification {
     /** @returns true si todavía queda algo volviendo al reposo. */
     _relax(immediate = false) {
         let pending = false;
+        let quieto = true;
         for (const child of this._container.get_children()) {
             const state = this._stateOf(child);
             if (immediate) {
@@ -323,9 +363,12 @@ export class Magnification {
                 state.scale = scale;
                 state.shift = shift;
             }
+            if (state.scale !== MIN_SCALE || state.shift !== 0)
+                quieto = false;
             this._paint(child, state);
         }
         this._publishStretch(0);
+        this._atRest = quieto;
         return pending;
     }
 }

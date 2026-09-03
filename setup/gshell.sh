@@ -265,16 +265,25 @@ cmd_patch() {
                 return;
             }
             const pedidos = $lista;
+            // Métodos **y** getters/setters. Los accessors tienen \`get\`/\`set\`
+            // en el descriptor y no \`value\`, así que el filtro viejo —que sólo
+            // miraba \`value\`— los salteaba en silencio: la clase quedaba con el
+            // código nuevo salvo sus getters, que seguían siendo los viejos o,
+            // si eran nuevos, no existían y devolvían undefined. Costó un
+            // diagnóstico entero (un \`get _magnificationSideroom()\` recién
+            // agregado dejó el dock con 0px de ancho).
+            const util = (d) => typeof d.value === 'function' || d.get || d.set;
             const todos = Object.getOwnPropertyNames(Q).filter(n => n !== 'constructor' &&
-                typeof Object.getOwnPropertyDescriptor(Q, n).value === 'function');
+                util(Object.getOwnPropertyDescriptor(Q, n)));
             const nombres = pedidos.length ? pedidos : todos;
             const cambiados = [], iguales = [], faltan = [];
+            const texto = (d) => d ? String(d.value ?? '') + String(d.get ?? '') + String(d.set ?? '') : null;
             for (const n of nombres) {
-                if (typeof Q[n] !== 'function') { faltan.push(n); continue; }
-                if (typeof P[n] === 'function' && P[n].toString() === Q[n].toString()) {
-                    iguales.push(n); continue;
-                }
-                P[n] = Q[n];
+                const dQ = Object.getOwnPropertyDescriptor(Q, n);
+                if (!dQ || !util(dQ)) { faltan.push(n); continue; }
+                const dP = Object.getOwnPropertyDescriptor(P, n);
+                if (dP && texto(dP) === texto(dQ)) { iguales.push(n); continue; }
+                Object.defineProperty(P, n, dQ);
                 cambiados.push(n);
             }
             globalThis.__gp = {estado: 'listo', cambiados, iguales, faltan};
