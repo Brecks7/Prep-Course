@@ -302,6 +302,13 @@ export class Magnification {
         return pending;
     }
     _stateOf(child) {
+        // El `??=` no es adorno. `setup/gshell.sh patch` recarga los métodos del
+        // prototipo pero **no** vuelve a correr el constructor, así que una
+        // instancia parcheada en caliente llega hasta acá sin el campo de clase
+        // y esto reventaba con «this._states is undefined» — apagando el dock
+        // entero. Los otros dos campos nuevos (`_stretch`, `_atRest`) son
+        // primitivos y se acomodan solos en el primer cuadro; éste no.
+        this._states ??= new WeakMap();
         let state = this._states.get(child);
         if (!state) {
             state = { scale: MIN_SCALE, shift: 0 };

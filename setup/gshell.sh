@@ -16,8 +16,12 @@
 #   bash setup/gshell.sh find macos-dock-root      buscar actor por style_class
 #   bash setup/gshell.sh tree 2                    árbol de actores visibles, N niveles
 #   bash setup/gshell.sh tree --all 2              incluyendo los ocultos
+#   bash setup/gshell.sh sesion                    ¿el shell está en modo NORMAL?
+#                                                  (una pantalla bloqueada apaga
+#                                                   las barreras de presión)
 #   bash setup/gshell.sh pointer                   dónde está el puntero
 #   bash setup/gshell.sh pointer 960 400           moverlo (dispositivo virtual)
+#   bash setup/gshell.sh click 888 1030            clic de verdad (con timestamp)
 #   bash setup/gshell.sh push bottom               empujar un borde hasta que
 #                                                  dispare la barrera de presión
 #   bash setup/gshell.sh patch <archivo> <Clase>   recargar los métodos de una
@@ -117,6 +121,32 @@ function _luego(ms,f){ _G.timeout_add(_G.PRIORITY_DEFAULT,ms,()=>{f(); return _G
 
 ev() { _eval "$PRELUDIO$1"; }
 
+# `Main` no se puede importar dentro de Eval con el loader legacy (ver el
+# comentario del PRELUDIO), pero `import()` dinámico sí funciona — es el mismo
+# truco que usa `patch`. Como devuelve una promesa y Eval es síncrono, se lanza
+# en una llamada y se recoge en la siguiente, cacheado en globalThis.
+#
+# Con esto se llega a `Main.extensionManager` (activar una extensión sin
+# logout), a `Main.sessionMode` y a `Main.actionMode` — que es lo que separa
+# «el dock está roto» de «la pantalla está bloqueada».
+_asegurar_main() {
+    _eval 'globalThis.__gshellMain ? "ya" : (import("resource:///org/gnome/shell/ui/main.js").then(m => { globalThis.__gshellMain = m; }), "lanzado")' >/dev/null 2>&1 || return 1
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        [[ "$(_eval 'globalThis.__gshellMain ? "si" : "no"' 2>/dev/null)" == "si" ]] && return 0
+        sleep 0.2
+    done
+    log_err "no se pudo cargar Main del shell"
+    return 1
+}
+
+# Igual que `ev`, pero con `_Main` disponible en el script.
+evm() {
+    _asegurar_main || return 1
+    _eval "${PRELUDIO}const _Main = globalThis.__gshellMain;
+$1"
+}
+
 # --- Subcomandos -------------------------------------------------------------
 cmd_check() {
     if ev '"ok"' >/dev/null 2>&1; then
@@ -125,6 +155,39 @@ cmd_check() {
         log_err "unsafe mode apagado"
         log_info "Alt+F2 → lg → Evaluator → global.context.unsafe_mode = true"
         return 3
+    fi
+}
+
+cmd_sesion() {
+    # En qué modo está el shell. Existe porque una sesión con la pantalla
+    # bloqueada se ve, desde acá, igual que una sana: los actores están, Eval
+    # responde, las barreras reciben los choques... y sin embargo nada de lo que
+    # dependa de `Shell.ActionMode` funciona. `PressureBarrier._onBarrierHit`
+    # descarta el evento con `!(this._actionMode & Main.actionMode)` antes de
+    # acumular presión, así que el revelado del dock mide cero y parece un bug
+    # del revelado. Con la pantalla bloqueada `actionMode` vale 8
+    # (UNLOCK_SCREEN) y la barrera del dock pide 3 (NORMAL|OVERVIEW): 3 & 8 = 0.
+    local out
+    out=$(evm 'const m = _Main.actionMode;
+        const nombres = {1:"NORMAL",2:"OVERVIEW",4:"LOCK_SCREEN",8:"UNLOCK_SCREEN",
+                         16:"LOGIN_SCREEN",32:"SYSTEM_MODAL",64:"LOOKING_GLASS",128:"POPUP"};
+        JSON.stringify({
+            actionMode: m,
+            nombre: nombres[m] || ("desconocido(" + m + ")"),
+            sessionMode: _Main.sessionMode ? _Main.sessionMode.currentMode : "?",
+            bloqueada: _Main.screenShield ? !!_Main.screenShield.locked : null,
+            modales: _Main.modalCount,
+            overview: _Main.overview ? !!_Main.overview.visible : null,
+        })') || return 1
+    echo "$out"
+    if [[ "$out" == *'"actionMode":1'* ]]; then
+        log_ok "modo NORMAL: las barreras de presión disparan"
+    else
+        log_warn "el shell NO está en modo NORMAL"
+        log_info "nada que dependa de Shell.ActionMode funciona acá:"
+        log_info "barreras de presión (revelado del dock, esquina de Actividades) y atajos"
+        [[ "$out" == *'"bloqueada":true'* ]] && log_info "la pantalla está bloqueada: desbloqueala y repetí"
+        return 4
     fi
 }
 
@@ -171,6 +234,24 @@ cmd_pointer() {
         # Clutter. xdotool, wtype y ydotool no sirven: hablan X11 o /dev/uinput.
         ev "_abs(${1:?falta x}, ${2:?falta y}); 'puntero en '+global.get_pointer().join(',')"
     fi
+}
+
+cmd_click() {
+    # Un clic de verdad, con el dispositivo virtual. No es lo mismo que llamar
+    # al handler a mano: `Meta.Window.activate()` necesita un timestamp de
+    # interacción del usuario y, llamada desde Eval sin ningún evento en curso,
+    # `global.get_current_time()` da 0 y mutter descarta la activación por
+    # prevención de robo de foco. El ciclado del dock avanza igual su índice
+    # interno, así que desde afuera parece que el clic "no hace nada".
+    local x="${1:?falta x}" y="${2:?falta y}" boton="${3:-1}"
+    ev "_abs($x,$y);
+        _luego(60, () => {
+            const d = _vd(), t = _t();
+            d.notify_button(t, $boton, _C.ButtonState.PRESSED);
+            _luego(40, () => d.notify_button(_t(), $boton, _C.ButtonState.RELEASED));
+        });
+        'clic en $x,$y'"
+    sleep 1
 }
 
 cmd_push() {
@@ -319,9 +400,11 @@ case "${1:-}" in
     find)    shift; cmd_find "$@" ;;
     tree)    shift; cmd_tree "$@" ;;
     pointer) shift; cmd_pointer "$@" ;;
+    sesion)  shift; cmd_sesion "$@" ;;
+    click)   shift; cmd_click "$@" ;;
     push)    shift; cmd_push "$@" ;;
     debug)   shift; cmd_debug "$@" ;;
     patch)   shift; cmd_patch "$@" ;;
-    -h|--help|"") sed -n '2,28p' "$0" | sed 's/^# \?//' ;;
-    *) log_err "subcomando desconocido: $1"; sed -n '13,25p' "$0" | sed 's/^# \?//'; exit 2 ;;
+    -h|--help|"") sed -n '2,33p' "$0" | sed 's/^# \?//' ;;
+    *) log_err "subcomando desconocido: $1"; sed -n '13,29p' "$0" | sed 's/^# \?//'; exit 2 ;;
 esac
