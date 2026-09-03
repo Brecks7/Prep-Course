@@ -22,25 +22,15 @@ Si alguna vez vuelve a colgar la GPU, la escalada está en `ESTADO-historial.md`
 (sesión del 31/08): `RADV_DEBUG=llvm`, y para capturar en vez de colgar
 `RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
 
-**Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **36
-commits adelante de `origin`** (el número real: `git rev-list --count @{u}..HEAD`).
-Está trabado por afuera del repo y sigue igual el 3/09: no hay `gh`, no hay
-`credential.helper` y `~/.ssh` está vacío, así que `git push` muere con
-`could not read Username for 'https://github.com'`. Leer sí anda —`git ls-remote`
-responde—: el repo es público, lo que falta es con qué escribir.
-
-Lo destraba la persona, de una de estas dos maneras:
-
-```bash
-ssh-keygen -t ed25519 -C "20cris.leonel02@gmail.com"       # Enter en todo
-cat ~/.ssh/id_ed25519.pub                                  # pegar en github.com/settings/ssh/new
-git remote set-url origin git@github.com:Brecks7/Prep-Course.git
-git push -u origin claude/linux-ubuntu-windows-migration-whc0li
-```
-
-o `sudo apt install gh && gh auth login` (interactivo, y el sudo por ventana
-gráfica). La clave SSH es preferible: no hay que instalar nada y no pasa ningún
-secreto por el chat.
+**El push quedó resuelto el 3/09**: la rama
+`claude/linux-ubuntu-windows-migration-whc0li` está en `origin`, a cero. Se
+destrabó con una clave SSH (`~/.ssh/id_ed25519`, ed25519 sin passphrase, cargada
+en la cuenta `Brecks7`) y el remoto cambiado a `git@github.com:Brecks7/Prep-Course.git`.
+`~/.ssh/known_hosts` tiene la clave ed25519 de github.com, verificada contra el
+fingerprint publicado (`SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`) —
+sin eso el primer push se cuelga preguntándolo. Comprobar con
+`ssh -T git@github.com`, que contesta «Hi Brecks7!». Sigue sin haber `gh` ni
+`credential.helper`, y no hacen falta.
 
 **El dock está cerrado entero y verificado en la sesión viva**: magnificación,
 nitidez del arte, reposo, revelado y ciclado del clic — ver «Qué funciona». No
