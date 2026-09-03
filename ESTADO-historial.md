@@ -1,4 +1,4 @@
-# Historial del escritorio — sesiones del 26 de agosto al 2 de septiembre de 2026
+# Historial del escritorio — sesiones del 26 de agosto al 3 de septiembre de 2026
 
 Esto es el relato completo de cada sesión: síntomas, diagnósticos, callejones sin
 salida y evidencia. **No se lee al arrancar.** `ESTADO.md` dice en qué anda cada
@@ -1227,3 +1227,127 @@ aprobada el 02/09 (dock 511×71, radio ~17, paso 53, puntos ⌀3).
 En la sesión viva: `patch` de las tres clases, `disable()`/`enable()` por Eval y
 un barrido de 11 posiciones a lo ancho y 7 a lo alto sin un solo error nuevo en
 el journal.
+
+## El dock — el revelado no estaba roto: la pantalla estaba bloqueada (3 de septiembre)
+
+El pendiente que se arrastraba desde el 31/08 decía que la sesión viva tenía una
+**barrera de presión huérfana** y que por eso el revelado del dock «medía cero».
+Era falso, y costó dos sesiones creerlo.
+
+### Lo que se encontró al empezar
+
+`macos-dock` estaba en «Activado: sí, **Estado: INACTIVE**» y en el stage no
+había ni un actor `macos-dock-*`: el usuario no tenía dock. `gnome-extensions
+disable && enable` no la revivió, igual que decía el estado.
+
+Para reactivarla hace falta `Main`, y a `Main` no se llega con `imports.ui.main`
+(el loader legacy tira «import declarations may only appear at top level»). Sí se
+llega con `import()` dinámico dentro de Eval — el mismo truco de `patch`. Como
+Eval es síncrono y el import devuelve una promesa, se lanza en una llamada y se
+recoge en la siguiente. Eso quedó en `gshell.sh` como `_asegurar_main`/`evm`.
+
+### El diagnóstico, medido
+
+Con el dock de vuelta y `auto-hide` en `true`, el dock se escondía bien y **cinco
+empujones seguidos contra el borde no lo revelaban**. Igual que la sesión pasada.
+
+Lo primero fue dejar de suponer y contar. Conectando a mano a las señales del
+`Meta.Barrier` vivo:
+
+    hit: 16   left: 0   trigger: 0
+
+O sea: **los choques sí llegan** — 16, uno por paso del empujón. La barrera no
+estaba huérfana. El que no disparaba era el `PressureBarrier`, y sus tripas lo
+confirmaban: `_currentPressure: 0` y `_barrierEvents: []` después de esos 16 hits.
+Ni un evento llegó a acumularse.
+
+Instrumentar `_onBarrierHit` no funcionó a la primera, dos veces:
+
+1. Asignarlo en la **instancia** no sirve: `addBarrier` hace
+   `barrier.connect('hit', this._onBarrierHit.bind(this))`, y ese `bind` capturó
+   la función original.
+2. Reemplazarlo en el **prototipo** tampoco, por lo mismo — el closure ya existía.
+
+Lo que sirvió fue `removeBarrier` + `addBarrier` después de instrumentar, para
+que el `bind` tomara el envoltorio. Ahí salió el dato:
+
+    {y:1080, dx:0, dy:12, slide:0, dist:12, modoPb:3, modoMain:8}
+
+`dist` 12 contra un umbral de 5: presión de sobra. Pero el código de GNOME
+descarta antes:
+
+```js
+// Throw out all events not in the proper keybinding mode
+if (!(this._actionMode & Main.actionMode))
+    return;
+```
+
+`3 & 8 === 0`. **`Main.actionMode` valía 8 = `UNLOCK_SCREEN`.** Y el resto encajó
+solo: `sessionMode: "unlock-dialog"`, `screenShield.locked: true`, `modalCount: 2`.
+
+**La pantalla estaba bloqueada.** No hay bug del revelado, ni barrera huérfana:
+con el bloqueo no funciona *ninguna* barrera de presión — tampoco la esquina de
+Actividades. Desde afuera se ve igual que un dock roto, y por eso se le cobró dos
+sesiones al dock.
+
+De ahí salió `gshell.sh sesion`, que se corre **antes** de acusar a nada.
+
+### Lo que sí quedó medido, con la pantalla desbloqueada
+
+Revelado, cinco ciclos seguidos: revela, se vuelve a esconder solo, y la barrera
+se destruye al mostrar y se recrea al esconder. **5 de 5.**
+
+Ciclado del clic sobre Ptyxis (3 ventanas, una en DP-3 y dos en DP-1):
+`227 → 220 → 217 → 227 → 220`. Recorre las tres en orden y vuelve a empezar.
+
+Acá hubo otra trampa. Llamar `_onAppClicked()` desde Eval **no prueba nada**: el
+índice interno del ciclo avanza (1 → 2 → 0 → 1, correcto), pero el foco no se
+mueve ni una vez. `Meta.Window.activate()` quiere un timestamp de interacción y
+`global.get_current_time()` da 0 sin ningún evento en curso, así que mutter
+descarta la activación por prevención de robo de foco. Con un clic de verdad
+—dispositivo virtual, `notify_button`— anda. Quedó como `gshell.sh click`.
+
+### La corrección al estado: el cursor sí salta
+
+El estado afirmaba «el cursor sin saltar ni una vez en siete clics». Midiendo el
+puntero después de cada clic:
+
+| clic | foco             | puntero    |
+|------|------------------|------------|
+| 1    | 4022510220 mon0  | 3036,1382  |
+| 2    | 4022510217 mon0  | 3036,1382  |
+| 3    | 4022510227 mon1  | 837,1037   |
+
+Salta, y siempre al monitor de la ventana que toma el foco. No es el dock: es
+PaperWM, en `tiling.js:4665`, sin ajuste que lo apague:
+
+```js
+// if window is on another monitor then warp pointer there
+if (!Main.overview.visible &&
+    Utils.monitorAtCurrentPoint() !== space.monitor) {
+    Utils.warpPointerToMonitor(space.monitor);
+}
+```
+
+La medición vieja no lo vio porque su ciclo no cruzaba de monitor.
+
+### El dock duplicado
+
+Mezclar `gnome-extensions enable` (por D-Bus) con `stateObj.enable()` (por Eval)
+deja `extensionManager` y el `stateObj` discrepando, y el resultado se cuenta:
+**dos `macos-dock-root` en el stage**. Ése es el origen real de las «barreras
+huérfanas» del estado viejo — un dock entero de más, con sus barreras. Se detecta
+contando raíces y se limpia destruyendo la que no sea `_dockManager._container`.
+El `disable()` del dock, por su cuenta, limpia bien: se midió 1 → 0 raíces.
+
+### El arreglo de código
+
+Uno solo, de una línea: `Magnification._stateOf()` ahora hace
+`this._states ??= new WeakMap()`. `gshell.sh patch` recarga los métodos del
+prototipo pero **no vuelve a correr el constructor**, así que una instancia
+recreada en caliente llegaba ahí sin el campo de clase y reventaba con
+«this._states is undefined», apagando el dock entero. Los otros dos campos nuevos
+(`_stretch`, `_atRest`) son primitivos y se acomodan solos en el primer cuadro.
+
+Verificado después: puntero en 913,1030 → `1.17 / 1.41 / 1.40 / 1.16`, fondo
+511 → 561. Idéntico a lo medido el 2/09.

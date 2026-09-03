@@ -22,44 +22,63 @@ Si alguna vez vuelve a colgar la GPU, la escalada está en `ESTADO-historial.md`
 (sesión del 31/08): `RADV_DEBUG=llvm`, y para capturar en vez de colgar
 `RADV_DEBUG=hang MESA_VK_ABORT_ON_DEVICE_LOSS=1 %command%`.
 
-**Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **23 commits
-adelante de `origin`**. Está trabado por afuera del repo: esta máquina no tiene con
-qué autenticarse contra GitHub — no hay `gh`, no hay `credential.helper` y no hay
-claves SSH, así que `git push` muere con `could not read Username for
-'https://github.com'`. Se destraba con `sudo apt install gh && gh auth login`
-(interactivo, **lo corre la persona**), o con una clave SSH y el remoto en
-`git@github.com:`.
+**Falta pushear**, rama `claude/linux-ubuntu-windows-migration-whc0li`, **36
+commits adelante de `origin`** (el número real: `git rev-list --count @{u}..HEAD`).
+Está trabado por afuera del repo y sigue igual el 3/09: no hay `gh`, no hay
+`credential.helper` y `~/.ssh` está vacío, así que `git push` muere con
+`could not read Username for 'https://github.com'`. Leer sí anda —`git ls-remote`
+responde—: el repo es público, lo que falta es con qué escribir.
 
-**El dock está cerrado: medido en el sandbox y verificado en la sesión viva**
-—magnificación, nitidez del arte y reposo—, ver «Qué funciona». La sesión de hoy
-corre el código nuevo sin haber cerrado sesión: `gshell.sh patch` de las tres
-clases más un `disable()`/`enable()` por Eval. Eso deja un detalle: `patch` copia
-el prototipo y **no el constructor**, así que los campos de clase nuevos hubo que
-ponerlos a mano (`_states`, `_stretch`, `_atRest`). En un login limpio no hace
-falta nada de eso.
+Lo destraba la persona, de una de estas dos maneras:
+
+```bash
+ssh-keygen -t ed25519 -C "20cris.leonel02@gmail.com"       # Enter en todo
+cat ~/.ssh/id_ed25519.pub                                  # pegar en github.com/settings/ssh/new
+git remote set-url origin git@github.com:Brecks7/Prep-Course.git
+git push -u origin claude/linux-ubuntu-windows-migration-whc0li
+```
+
+o `sudo apt install gh && gh auth login` (interactivo, y el sudo por ventana
+gráfica). La clave SSH es preferible: no hay que instalar nada y no pasa ningún
+secreto por el chat.
+
+**El dock está cerrado entero y verificado en la sesión viva**: magnificación,
+nitidez del arte, reposo, revelado y ciclado del clic — ver «Qué funciona». No
+queda nada pendiente de este tema.
 
 Revertir todo el estilo: `~/.setup-ubuntu-backups/dock-antes-20260902.sh`.
 
-**Falta un login limpio para medir el revelado.** Los dos arreglos del 31/08
-—umbral de revelado y ciclado del clic— están verificados, pero la sesión viva
-quedó con una barrera de presión huérfana, así que ahí no se puede medir el
-revelado: los choques contra la barrera nueva no llegan. La prueba en el sandbox
-sí es limpia. Al volver a entrar, repetir el gesto suave contra el borde de abajo
-y los tres clics sobre el icono de la terminal.
+**El revelado y el ciclado quedaron medidos en la sesión viva, sin login** — y
+la causa por la que antes «daba cero» **no era** la barrera huérfana que decía
+este archivo. Los choques sí llegaban (16 hits contados sobre el `Meta.Barrier`);
+lo que no pasaba era la acumulación de presión, porque **la pantalla estaba
+bloqueada**: con el bloqueo, `Main.actionMode` vale 8 (`UNLOCK_SCREEN`) y la
+barrera del dock pide 3 (`NORMAL|OVERVIEW`), así que `PressureBarrier` descarta
+cada evento en `!(this._actionMode & Main.actionMode)` antes de sumar nada. Desde
+afuera se ve idéntico a un dock roto. Por eso ahora existe `gshell.sh sesion`:
+**se corre primero, siempre**, antes de culpar a nada del escritorio.
 
 **El RGB está cerrado entero, tiras incluidas, y el restore al arrancar también**
 — ver «Qué funciona». No queda nada pendiente de este tema.
 
-Antes de tocar nada del dock: `gsettings ... auto-hide` tiene que estar en `true`
-(ver «Abierto»).
+Para medir el revelado hacen falta dos cosas, en este orden: que `gshell.sh
+sesion` diga **NORMAL** (si no, no dispara ninguna barrera de presión y la medición
+miente), y `auto-hide` en `true` — sin eso no hay `DockVisibility`. Queda en
+`false`, que es como lo usa el escritorio; se prende sólo para medir.
 
 ```bash
 bash setup/gshell.sh check          # unsafe mode: Alt+F2 → lg → global.context.unsafe_mode = true
+bash setup/gshell.sh sesion         # ¿NORMAL? si no, lo que midas no vale
 bash setup/gshell.sh push bottom
+bash setup/gshell.sh click 837 1037              # clic de verdad, con timestamp
 bash setup/gshell.sh find macos-dock-root
 bash setup/gshell.sh pointer 888 1030            # el puntero sobre un icono
 bash setup/shell-sandbox.sh --shot /tmp/d.png --hover 3 macos-dock@son.local
 ```
+
+`click` existe porque llamar al handler a mano **no** alcanza: `activate()` sin
+timestamp de interacción la descarta mutter por prevención de robo de foco, y el
+ciclado avanza su índice igual, así que parece que el clic no hace nada.
 
 `--hover N` fotografía la magnificación en el sandbox: en headless no hay
 puntero, así que el probe llama a `applyAt()`, que deja el estado final sin
@@ -203,12 +222,18 @@ suavizado. Admite decimales (3.5 es justo entre dos iconos).
   umbral de revelado de 100 px, que era la causa del «se revela una vez y después
   no» — mutter cuenta cuánto te *habrías pasado de largo*, no cuánto recorriste.
   Default 5, configurable como `reveal-threshold`. Causas y barrido de valores en
-  `setup/README.md` y en `ESTADO-historial.md`.
+  `setup/README.md` y en `ESTADO-historial.md`. **Medido en la sesión viva el
+  3/09: cinco de cinco.** Cada ciclo revela, vuelve a esconderse solo, y la
+  barrera se destruye al mostrar y se recrea al esconder.
 - **El clic en el icono cicla, y empieza por la ventana de tu monitor.** Antes
   devolvía la primera del orden de apilado, sin relación con dónde estás mirando.
   Verificado: cinco clics alternando 0→1→0→1→0, el orden invirtiéndose al mover el
-  puntero al otro monitor, y el cursor sin saltar ni una vez en siete clics. Quien
-  mueve ventanas entre monitores es PaperWM, no el dock.
+  puntero al otro monitor. Re-verificado el 3/09 con clics de verdad: seis clics
+  recorren las tres ventanas de Ptyxis en orden y vuelven a empezar.
+  **Corrección:** el cursor sí salta, y no es culpa del dock — al enfocar una
+  ventana de otro monitor lo mueve PaperWM, sin condición ni ajuste que lo apague
+  (`tiling.js:4665`, «if window is on another monitor then warp pointer there»).
+  La medición vieja no lo vio porque el ciclo no cruzaba de monitor.
 - **No hay fantasma al minimizar.** El guard vive en código propio
   (`mactahoe-tweaks/ghostGuard.js`), no en el parche de PaperWM: ese parche está
   bien puesto pero **no llega a correr** para esas ventanas. Regla única: una
@@ -272,13 +297,16 @@ suavizado. Admite decimales (3.5 es justo entre dos iconos).
   (11 posiciones a lo ancho, 7 a lo alto) no agregó ni un error.
 - **`auto-hide` aparece en `false` al arrancar la sesión** aunque se lo haya
   dejado en `true`. No se investigó si lo pisa el reinicio o el arranque de la
-  extensión. Cuesta una sesión: sin auto-hide no hay `DockVisibility`, así que
-  medir el revelado da cero y parece un bug del revelado.
-- **GNOME desactiva `macos-dock` al cambiarle los archivos** (queda «Activado:
-  sí, Estado: INACTIVE») y ni `gnome-extensions enable` ni `enableExtension()`
-  la reviven; lo que sí funciona es `stateObj.enable()` a mano por Eval. Pero
-  las barreras de la instancia anterior quedan vivas y se comen los eventos:
-  para medir el revelado después de tocar archivos hace falta login o sandbox.
+  extensión. Sin auto-hide no hay `DockVisibility` y el revelado no se puede medir.
+- **`macos-dock` aparece «Activado: sí, Estado: INACTIVE»** y ni
+  `gnome-extensions enable` ni `enableExtension()` la reviven; lo que funciona es
+  `stateObj.enable()` a mano por Eval. Antes esto se le atribuía a «cambiarle los
+  archivos»; el 3/09 se la encontró así **con la pantalla bloqueada**, así que la
+  causa está sin confirmar. Lo que sí quedó medido: mezclar `gnome-extensions
+  enable` con `stateObj.enable()` deja `extensionManager` y el `stateObj`
+  discrepando, y de ahí salen **dos `macos-dock-root` en el stage** — el dock
+  duplicado del que salían las «barreras huérfanas». Se detecta contando raíces y
+  se limpia destruyendo la que no sea `_dockManager._container`.
 - Curiosidad técnica, no un bug: por qué el `showHandler` parcheado de PaperWM no
   corre para las ventanas que dejaban fantasma. El guard propio ya cubre el
   síntoma.
